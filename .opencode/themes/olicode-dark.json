@@ -1,0 +1,226 @@
+{
+  "$schema": "https://opencode.ai/theme.json",
+  "defs": {
+    "void": "#080810",
+    "deepspace": "#0D0D1A",
+    "panel": "#12121F",
+    "element": "#1A1A2E",
+    "border": "#2A2A4A",
+    "borderActive": "#4A4A8A",
+    "mutedText": "#4A4A6A",
+    "softText": "#8888AA",
+    "text": "#C8C8E8",
+    "bright": "#E8E8FF",
+    "violet": "#7C3AED",
+    "violetBright": "#9D5FF0",
+    "cyan": "#06B6D4",
+    "cyanSoft": "#0EA5E9",
+    "emerald": "#10B981",
+    "amber": "#F59E0B",
+    "red": "#EF4444",
+    "pink": "#EC4899",
+    "lavender": "#A78BFA"
+  },
+  "theme": {
+    "primary": {
+      "dark": "violetBright",
+      "light": "violet"
+    },
+    "secondary": {
+      "dark": "cyan",
+      "light": "cyanSoft"
+    },
+    "accent": {
+      "dark": "lavender",
+      "light": "violet"
+    },
+    "error": {
+      "dark": "red",
+      "light": "red"
+    },
+    "warning": {
+      "dark": "amber",
+      "light": "amber"
+    },
+    "success": {
+      "dark": "emerald",
+      "light": "emerald"
+    },
+    "info": {
+      "dark": "cyan",
+      "light": "cyanSoft"
+    },
+    "text": {
+      "dark": "text",
+      "light": "element"
+    },
+    "textMuted": {
+      "dark": "softText",
+      "light": "mutedText"
+    },
+    "background": {
+      "dark": "void",
+      "light": "bright"
+    },
+    "backgroundPanel": {
+      "dark": "panel",
+      "light": "text"
+    },
+    "backgroundElement": {
+      "dark": "element",
+      "light": "softText"
+    },
+    "border": {
+      "dark": "border",
+      "light": "softText"
+    },
+    "borderActive": {
+      "dark": "borderActive",
+      "light": "border"
+    },
+    "borderSubtle": {
+      "dark": "deepspace",
+      "light": "border"
+    },
+    "diffAdded": {
+      "dark": "emerald",
+      "light": "emerald"
+    },
+    "diffRemoved": {
+      "dark": "red",
+      "light": "red"
+    },
+    "diffContext": {
+      "dark": "mutedText",
+      "light": "mutedText"
+    },
+    "diffHunkHeader": {
+      "dark": "violet",
+      "light": "violet"
+    },
+    "diffHighlightAdded": {
+      "dark": "emerald",
+      "light": "emerald"
+    },
+    "diffHighlightRemoved": {
+      "dark": "red",
+      "light": "red"
+    },
+    "diffAddedBg": {
+      "dark": "#0D2A1A",
+      "light": "#D1FAE5"
+    },
+    "diffRemovedBg": {
+      "dark": "#2A0D0D",
+      "light": "#FEE2E2"
+    },
+    "diffContextBg": {
+      "dark": "panel",
+      "light": "text"
+    },
+    "diffLineNumber": {
+      "dark": "softText",
+      "light": "mutedText"
+    },
+    "diffAddedLineNumberBg": {
+      "dark": "#0D2A1A",
+      "light": "#D1FAE5"
+    },
+    "diffRemovedLineNumberBg": {
+      "dark": "#2A0D0D",
+      "light": "#FEE2E2"
+    },
+    "markdownText": {
+      "dark": "text",
+      "light": "element"
+    },
+    "markdownHeading": {
+      "dark": "violetBright",
+      "light": "violet"
+    },
+    "markdownLink": {
+      "dark": "cyan",
+      "light": "cyanSoft"
+    },
+    "markdownLinkText": {
+      "dark": "lavender",
+      "light": "violet"
+    },
+    "markdownCode": {
+      "dark": "emerald",
+      "light": "emerald"
+    },
+    "markdownBlockQuote": {
+      "dark": "mutedText",
+      "light": "mutedText"
+    },
+    "markdownEmph": {
+      "dark": "pink",
+      "light": "pink"
+    },
+    "markdownStrong": {
+      "dark": "amber",
+      "light": "amber"
+    },
+    "markdownHorizontalRule": {
+      "dark": "border",
+      "light": "border"
+    },
+    "markdownListItem": {
+      "dark": "cyan",
+      "light": "cyanSoft"
+    },
+    "markdownListEnumeration": {
+      "dark": "lavender",
+      "light": "violet"
+    },
+    "markdownImage": {
+      "dark": "cyan",
+      "light": "cyanSoft"
+    },
+    "markdownImageText": {
+      "dark": "lavender",
+      "light": "violet"
+    },
+    "markdownCodeBlock": {
+      "dark": "text",
+      "light": "element"
+    },
+    "syntaxComment": {
+      "dark": "mutedText",
+      "light": "mutedText"
+    },
+    "syntaxKeyword": {
+      "dark": "violetBright",
+      "light": "violet"
+    },
+    "syntaxFunction": {
+      "dark": "cyan",
+      "light": "cyanSoft"
+    },
+    "syntaxVariable": {
+      "dark": "lavender",
+      "light": "violet"
+    },
+    "syntaxString": {
+      "dark": "emerald",
+      "light": "emerald"
+    },
+    "syntaxNumber": {
+      "dark": "pink",
+      "light": "pink"
+    },
+    "syntaxType": {
+      "dark": "amber",
+      "light": "amber"
+    },
+    "syntaxOperator": {
+      "dark": "cyan",
+      "light": "cyanSoft"
+    },
+    "syntaxPunctuation": {
+      "dark": "softText",
+      "light": "mutedText"
+    }
+  }
+}
