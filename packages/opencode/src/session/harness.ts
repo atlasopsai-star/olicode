@@ -1,8 +1,12 @@
 import type { Agent } from "@/agent/agent"
 
 export type Mode = "build" | "debug" | "design" | "research" | "browser" | "ship"
+export type Rigor = "fast" | "standard"
 
 const ORDER: Mode[] = ["browser", "debug", "design", "ship", "research", "build"]
+
+const FAST_SIGNALS = new Set(["typo", "rename", "copy", "label", "wording", "comment", "tiny", "quick"])
+const MULTI_STEP_SIGNALS = ["and then", "also", "as well as", "after that", "additionally"]
 
 const KEYWORDS: Record<Mode, string[]> = {
   browser: ["browser", "playwright", "web", "website", "checkout", "login", "click", "navigate", "dom"],
@@ -53,6 +57,16 @@ export function classify(text: string): Mode {
   }, "build" as Mode)
 }
 
+export function rigor(text: string): Rigor {
+  const tokens = tokenize(text)
+  if (tokens.length === 0) return "standard"
+  const lower = text.toLowerCase()
+  if (MULTI_STEP_SIGNALS.some((signal) => lower.includes(signal))) return "standard"
+  if (tokens.length > 25) return "standard"
+  if (tokens.length <= 8) return "fast"
+  return tokens.some((token) => FAST_SIGNALS.has(token)) ? "fast" : "standard"
+}
+
 export function objective(query: string) {
   return query
     .replace(/\s+/g, " ")
@@ -72,6 +86,7 @@ export function execution(input: { query: string }) {
   const mode = classify(input.query)
   return {
     mode,
+    rigor: rigor(input.query),
     objective: objective(input.query),
     ...(mode === "browser" ? { browser: browserMetadata(input.query) } : {}),
   }
@@ -82,13 +97,20 @@ export function render(input: { agent: Agent.Info; query: string }) {
   const lines = [
     "<olicode_harness>",
     `Mode: ${details.mode}`,
+    `Rigor: ${details.rigor}`,
     "Stay tightly focused on the user's main objective.",
     "Keep progress updates and final answers short, direct, and high-signal.",
     "Do not repeat the user's request, narrate obvious steps, or drift into unrelated research.",
     "Prefer the smallest correct change over broad rewrites or speculative abstractions.",
     "Load only the skills and tools that directly help with the current task.",
+    "Do not perform extra unrequested changes (\"while I'm here...\", drive-by cleanup, extra refactors) unless explicitly asked.",
     "Stop once the requested outcome is achieved and verified.",
   ]
+
+  if (details.rigor === "fast")
+    lines.push(
+      "This looks like a small, well-scoped change. Skip upfront planning ceremony and broad exploration — read only what's directly needed, make the minimal edit, verify narrowly, and stop.",
+    )
 
   if (input.agent.name === "plan") lines.push("Plan precisely. Do not implement code in this mode.")
   if (details.mode === "build") lines.push("Read the relevant code, make a tight plan, implement the minimum high-quality diff, and verify it.")
