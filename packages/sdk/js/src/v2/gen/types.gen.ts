@@ -350,6 +350,10 @@ export type SessionStatus =
     }
   | {
       type: "busy"
+      title?: string
+      metadata?: {
+        [key: string]: unknown
+      }
     }
 
 export type Project = {
@@ -720,6 +724,21 @@ export type CompactionPart = {
   tail_start_id?: string
 }
 
+export type HarnessPart = {
+  id: string
+  sessionID: string
+  messageID: string
+  type: "harness"
+  kind: "contract" | "decision" | "skill" | "scope" | "proof" | "telemetry" | "completion"
+  taskID: string
+  data: {
+    [key: string]: unknown
+  }
+  time: {
+    created: number
+  }
+}
+
 export type Part =
   | TextPart
   | SubtaskPart
@@ -733,6 +752,7 @@ export type Part =
   | AgentPart
   | RetryPart
   | CompactionPart
+  | HarnessPart
 
 export type PermissionAction = "allow" | "deny" | "ask"
 

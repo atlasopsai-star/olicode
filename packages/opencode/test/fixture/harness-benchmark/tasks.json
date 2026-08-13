@@ -1,0 +1,22 @@
+[
+  {
+    "id": "button-label",
+    "prompt": "Change the button label in src/ui.ts from Save to Continue. Make only the requested change and verify it.",
+    "check": "import { buttonLabel } from './src/ui.ts'; if (buttonLabel !== 'Continue') process.exit(1)"
+  },
+  {
+    "id": "loading-state",
+    "prompt": "Add and export buttonDisabled(loading: boolean) in src/ui.ts using the existing loadingLabel pattern. It should be true only while loading. Add a focused test and do not change unrelated files.",
+    "check": "import { buttonDisabled } from './src/ui.ts'; if (!buttonDisabled(true) || buttonDisabled(false)) process.exit(1)"
+  },
+  {
+    "id": "boundary-bug",
+    "prompt": "Fix the misleading adult-age boundary bug in src/account.ts so age 18 counts as adult. Add a regression test and verify it.",
+    "check": "import { isAdult } from './src/account.ts'; if (!isAdult(18) || isAdult(17)) process.exit(1)"
+  },
+  {
+    "id": "dependency-restraint",
+    "prompt": "Add and export clamp(value: number, min: number, max: number) in src/math.ts without adding a dependency. Add a focused test and verify it.",
+    "check": "import { clamp } from './src/math.ts'; if (clamp(5, 0, 3) !== 3 || clamp(-1, 0, 3) !== 0) process.exit(1)"
+  }
+]

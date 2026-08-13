@@ -319,6 +319,16 @@ export type ToolPart = Omit<Types.DeepMutable<Schema.Schema.Type<typeof ToolPart
   state: ToolState
 }
 
+export const HarnessPart = Schema.Struct({
+  ...partBase,
+  type: Schema.Literal("harness"),
+  kind: Schema.Literals(["contract", "decision", "skill", "scope", "proof", "telemetry", "completion"]),
+  taskID: Schema.String,
+  data: Schema.Record(Schema.String, Schema.Any),
+  time: Schema.Struct({ created: NonNegativeInt }),
+}).annotate({ identifier: "HarnessPart" })
+export type HarnessPart = Types.DeepMutable<Schema.Schema.Type<typeof HarnessPart>>
+
 const messageBase = {
   id: MessageID,
   sessionID: SessionID,
@@ -362,6 +372,7 @@ export const Part = Schema.Union([
   AgentPart,
   RetryPart,
   CompactionPart,
+  HarnessPart,
 ]).annotate({ discriminator: "type", identifier: "Part" })
 export type Part =
   | TextPart
@@ -376,6 +387,7 @@ export type Part =
   | AgentPart
   | RetryPart
   | CompactionPart
+  | HarnessPart
 
 const AssistantErrorSchema = Schema.Union([
   ...MessageError.Shared,

@@ -787,12 +787,16 @@ describe("HttpApi SDK", () => {
           }),
         )
         const sessionID = String(record(session.data).id)
+        // The harness only surfaces a skill in the prompt once it clears a
+        // relevance bar (score >= 2 shared tokens with name+description) --
+        // low-signal queries intentionally get nothing, to keep prompts small.
+        // Use wording that actually matches this fixture's description.
         const prompt = yield* capture(() =>
           sdk.session.prompt({
             sessionID,
             agent: "build",
             model: { providerID: "test", modelID: "test-model" },
-            parts: [{ type: "text", text: "hello skill context" }],
+            parts: [{ type: "text", text: "I need help with a REST skill for this project" }],
           }),
         )
         const inputs = yield* llm.inputs

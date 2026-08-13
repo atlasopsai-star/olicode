@@ -8,7 +8,8 @@ import * as Tool from "./tool"
 import DESCRIPTION from "./skill.txt"
 
 export const Parameters = Schema.Struct({
-  name: Schema.String.annotate({ description: "The name of the skill from available_skills" }),
+  name: Schema.optional(Schema.String).annotate({ description: "A high-confidence skill name from relevant_skills" }),
+  query: Schema.optional(Schema.String).annotate({ description: "Search compact skill metadata when no surfaced candidate fits" }),
 })
 
 export const SkillTool = Tool.define(
@@ -22,14 +23,25 @@ export const SkillTool = Tool.define(
       parameters: Parameters,
       execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
+          const name = params.name ?? (yield* skill.all()).map((item) => ({
+            item,
+            metadata: Skill.metadata(item),
+            score: params.query
+              ? params.query.toLowerCase().split(/[^a-z0-9]+/).filter((part) => part.length >= 3).reduce(
+                  (score, token) => score + (Skill.metadata(item).positiveTriggers.some((trigger) => trigger.includes(token)) ? 1 : 0),
+                  0,
+                )
+              : 0,
+          })).sort((a, b) => b.score - a.score)[0]?.item.name
+          if (!name) return yield* Effect.fail(new Error("Provide a skill name or a metadata search query."))
           const info = yield* skill
-            .require(params.name)
+            .require(name)
             .pipe(Effect.catchTag("Skill.NotFoundError", (error) => Effect.die(new Error(error.message))))
 
           yield* ctx.ask({
             permission: "skill",
-            patterns: [params.name],
-            always: [params.name],
+            patterns: [name],
+            always: [name],
             metadata: {},
           })
 
@@ -64,6 +76,9 @@ export const SkillTool = Tool.define(
             metadata: {
               name: info.name,
               dir,
+              selectedBy: params.name ? "candidate" : "search",
+              reason: params.query ?? `Explicit candidate ${info.name}`,
+              estimatedTokens: Skill.metadata(info).tokenCost,
             },
           }
         }).pipe(Effect.orDie),

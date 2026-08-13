@@ -532,9 +532,9 @@ it.instance("loop injects OliCode harness guidance for focused browser tasks", (
 
     const [hit] = yield* llm.hits
     const payload = JSON.stringify(hit?.body ?? {})
-    expect(payload).toContain("Mode: browser")
-    expect(payload).toContain("high-signal")
-    expect(payload).toContain("purposeful and concise")
+    expect(payload).toContain("Action: browser")
+    expect(payload).toContain("Rigor: BROWSER")
+    expect(payload).toContain("Verify the acceptance criteria and changed-file scope before finishing.")
   }),
 )
 
@@ -625,11 +625,14 @@ it.instance(
         permission: [{ permission: "*", pattern: "*", action: "allow" }],
       })
 
+      // A plain question ("answer" action) carries no required evidence, so
+      // this stays a single-turn exchange and isolates the thing under test
+      // (model routing/fallback) from the separate proof-gate mechanism.
       yield* prompt.prompt({
         sessionID: session.id,
         agent: "build",
         noReply: true,
-        parts: [{ type: "text", text: "build a feature quickly" }],
+        parts: [{ type: "text", text: "what does this project do?" }],
       })
 
       yield* llm.text("fallback-ok")

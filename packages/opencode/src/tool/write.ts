@@ -14,6 +14,8 @@ import { InstanceState } from "@/effect/instance-state"
 import { trimDiff } from "./edit"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import * as Bom from "@/util/bom"
+import { ScopeGuard } from "@/session/scope-guard"
+import type { Execution } from "@/session/harness"
 
 const MAX_PROJECT_DIAGNOSTICS_FILES = 5
 
@@ -44,6 +46,17 @@ export const WriteTool = Tool.define(
           yield* assertExternalDirectoryEffect(ctx, filepath)
 
           const exists = yield* fs.existsSafe(filepath)
+          const execution = ctx.extra?.execution as Execution | undefined
+          if (execution) {
+            const decision = ScopeGuard.inspectMutation({
+              filePath: filepath,
+              exists,
+              messages: ctx.messages,
+              contract: execution.contract,
+            })
+            if (decision.classification === "UNRELATED")
+              return yield* Effect.die(new Error(`OliHarness blocked write to ${filepath}: ${decision.reason}`))
+          }
           const source = exists ? yield* Bom.readFile(fs, filepath) : { bom: false, text: "" }
           const next = Bom.split(params.content)
           const desiredBom = source.bom || next.bom

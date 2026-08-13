@@ -11,11 +11,13 @@ const build = {
 
 describe("session.harness", () => {
   test("classify picks browser tasks first", () => {
-    expect(SessionHarness.classify("Use the browser to test checkout and login flow")).toBe("browser")
+    expect(SessionHarness.action("Use the browser to test checkout and login flow")).toBe("browser")
   })
 
   test("classify picks design tasks", () => {
-    expect(SessionHarness.classify("Redesign the landing page UI with more visual polish and premium typography")).toBe("design")
+    expect(SessionHarness.action("Redesign the landing page UI with more visual polish and premium typography")).toBe(
+      "design",
+    )
   })
 
   test("render injects concise focus rules", () => {
@@ -24,10 +26,9 @@ describe("session.harness", () => {
       query: "Fix the failing auth tests and keep the answer short",
     })
 
-    expect(output).toContain("Mode: debug")
-    expect(output).toContain("Keep progress updates and final answers short, direct, and high-signal.")
-    expect(output).toContain("Do not repeat the user's request")
-    expect(output).toContain("Find the root cause before changing code")
+    expect(output).toContain("Action: debug")
+    expect(output).toContain("Final response style: tight")
+    expect(output).toContain("Every substantial action must materially help")
   })
 
   test("execution returns browser workflow metadata", () => {
@@ -35,25 +36,26 @@ describe("session.harness", () => {
       SessionHarness.execution({ query: "Use the browser to test checkout login flow and capture DOM state" }),
     ).toEqual({
       mode: "browser",
-      rigor: "standard",
+      rigor: "BROWSER",
       objective: "Use the browser to test checkout login flow and capture DOM state",
+      contract: SessionHarness.contract("Use the browser to test checkout login flow and capture DOM state"),
       browser: {
         objective: "Use the browser to test checkout login flow and capture DOM state",
-        checkpoints: ["use", "browser", "test", "checkout", "login", "flow"],
+        checkpoints: ["browser", "test", "checkout", "login", "flow", "capture"],
       },
     })
   })
 
   test("rigor picks fast for small, well-scoped edits", () => {
-    expect(SessionHarness.rigor("Fix the typo in the header")).toBe("fast")
-    expect(SessionHarness.rigor("Rename this variable to userId")).toBe("fast")
+    expect(SessionHarness.rigor("Change src/header.ts button label")).toBe("FAST")
+    expect(SessionHarness.rigor("Rename src/user.ts variable")).toBe("FAST")
   })
 
   test("rigor picks standard for longer or multi-step requests", () => {
     expect(SessionHarness.rigor("Redesign the landing page UI with more visual polish and premium typography")).toBe(
-      "standard",
+      "DESIGN",
     )
-    expect(SessionHarness.rigor("Fix the login bug and then also update the tests")).toBe("standard")
+    expect(SessionHarness.rigor("Fix the login bug and then also update the tests")).toBe("DEBUG")
   })
 
   test("render includes rigor and skips ceremony for fast tasks", () => {
@@ -62,7 +64,30 @@ describe("session.harness", () => {
       query: "Fix the typo in the header",
     })
 
-    expect(output).toContain("Rigor: fast")
-    expect(output).toContain("Skip upfront planning ceremony")
+    expect(output).toContain("Rigor: FAST")
+    expect(output).toContain("make the surgical edit")
+  })
+
+  test("contract protects lockfiles and budgets dependencies", () => {
+    const contract = SessionHarness.contract("Change src/button.ts label")
+    expect(contract.action).toBe("change")
+    expect(contract.protectedScope).toContain("bun.lock")
+    expect(contract.budgets.maxNewDependencies).toBe(0)
+    expect(contract.requiredEvidence.map((item) => item.id)).toEqual(["change", "validation", "scope"])
+  })
+
+  test("read-only requests do not authorize mutation", () => {
+    expect(SessionHarness.contract("Audit the provider architecture").action).toBe("inspect")
+  })
+
+  test("extracts explicit constraints, non-goals, evidence, and file scope", () => {
+    const contract = SessionHarness.contract(
+      "Change src/button.ts. Do not add dependencies. Run the targeted tests and ensure the typecheck passes.",
+    )
+    expect(contract.allowedScope).toContain("src/button.ts")
+    expect(contract.nonGoals.some((item) => item.includes("Do not add dependencies"))).toBe(true)
+    expect(contract.acceptanceCriteria.some((item) => item.includes("typecheck"))).toBe(true)
+    expect(contract.requiredEvidence.map((item) => item.id)).toContain("tests")
+    expect(contract.requiredEvidence.map((item) => item.id)).toContain("typecheck")
   })
 })

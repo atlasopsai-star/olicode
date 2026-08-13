@@ -62,6 +62,8 @@ import { SessionReminders } from "./reminders"
 import { SessionTools } from "./tools"
 import { LLMEvent } from "@opencode-ai/llm"
 import { SessionHarness } from "./harness"
+import { HarnessCore } from "./harness-core"
+import { HarnessRecord } from "./harness-record"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -266,7 +268,8 @@ export const layer = Layer.effect(
       if (!ag) return
       const mdl =
         (yield* preferredAgentModel(ag)) ??
-        ((yield* provider.getSmallModel(input.providerID)) ?? (yield* provider.getModel(input.providerID, input.modelID)))
+        (yield* provider.getSmallModel(input.providerID)) ??
+        (yield* provider.getModel(input.providerID, input.modelID))
       const msgs = onlySubtasks
         ? [{ role: "user" as const, content: subtasks.map((p) => p.prompt).join("\n") }]
         : yield* MessageV2.toModelMessagesEffect(context, mdl)
@@ -512,7 +515,10 @@ export const layer = Layer.effect(
               throw error
             }
             const agentModel = yield* preferredAgentModel(agent)
-            const model = input.model ?? (agentModel ? { providerID: agentModel.providerID, modelID: agentModel.id } : undefined) ?? (yield* currentModel(input.sessionID))
+            const model =
+              input.model ??
+              (agentModel ? { providerID: agentModel.providerID, modelID: agentModel.id } : undefined) ??
+              (yield* currentModel(input.sessionID))
             const userMsg: MessageV2.User = {
               id: input.messageID ?? MessageID.ascending(),
               sessionID: input.sessionID,
@@ -717,7 +723,7 @@ export const layer = Layer.effect(
         : yield* currentModel(input.sessionID)
       return yield* provider
         .routeModel({
-          mode: SessionHarness.classify(query),
+          mode: SessionHarness.routeMode(query),
           query,
           current: preferred,
         })
@@ -743,8 +749,15 @@ export const layer = Layer.effect(
           .get(),
       )
       const agentModel = yield* preferredAgentModel(ag)
-      const routed = input.model || agentModel ? undefined : yield* routedModel({ sessionID: input.sessionID, agent: ag, parts: input.parts, current })
-      const model = input.model ?? (agentModel ? { providerID: agentModel.providerID, modelID: agentModel.id } : undefined) ?? { providerID: routed!.providerID, modelID: routed!.id }
+      const routed =
+        input.model || agentModel
+          ? undefined
+          : yield* routedModel({ sessionID: input.sessionID, agent: ag, parts: input.parts, current })
+      const model = input.model ??
+        (agentModel ? { providerID: agentModel.providerID, modelID: agentModel.id } : undefined) ?? {
+          providerID: routed!.providerID,
+          modelID: routed!.id,
+        }
       const same = agentModel && model.providerID === agentModel.providerID && model.modelID === agentModel.id
       const full =
         !input.variant && ag.variant && same
@@ -1293,12 +1306,41 @@ export const layer = Layer.effect(
           if (!lastUser) throw new Error("No user message found in stream. This should never happen.")
 
           const execution = SessionHarness.execution({
-            query: msgs
-              .flatMap((msg) => (msg.info.role === "user" ? msg.parts : []))
+            query: (msgs.findLast((msg) => msg.info.id === lastUser.id)?.parts ?? [])
               .filter((part): part is MessageV2.TextPart => part.type === "text" && !part.synthetic)
               .map((part) => part.text)
               .join("\n"),
           })
+
+          if (
+            SessionHarness.enabled() &&
+            !msgs.some((message) =>
+              message.parts.some(
+                (part) => part.type === "harness" && part.kind === "contract" && part.taskID === execution.contract.id,
+              ),
+            )
+          ) {
+            yield* HarnessRecord.write({
+              session: sessions,
+              sessionID,
+              messageID: lastUser.id,
+              taskID: execution.contract.id,
+              kind: "contract",
+              data: execution.contract,
+            })
+            yield* HarnessRecord.write({
+              session: sessions,
+              sessionID,
+              messageID: lastUser.id,
+              taskID: execution.contract.id,
+              kind: "decision",
+              data: {
+                action: execution.contract.action,
+                rigor: execution.contract.rigor,
+                budgets: execution.contract.budgets,
+              },
+            })
+          }
 
           yield* status.set(sessionID, {
             type: "busy",
@@ -1440,12 +1482,13 @@ export const layer = Layer.effect(
             const tools = yield* SessionTools.resolve({
               agent,
               session,
+              sessionService: sessions,
               model,
               processor: handle,
               bypassAgentCheck,
               messages: msgs,
               promptOps,
-              execution,
+              execution: SessionHarness.enabled() ? execution : undefined,
             }).pipe(
               Effect.provideService(Plugin.Service, plugin),
               Effect.provideService(Permission.Service, permission),
@@ -1489,9 +1532,7 @@ export const layer = Layer.effect(
             const query = lastUserMsg
               ? lastUserMsg.parts
                   .filter(
-                    (
-                      part,
-                    ): part is Extract<(typeof lastUserMsg.parts)[number], { type: "text" }> =>
+                    (part): part is Extract<(typeof lastUserMsg.parts)[number], { type: "text" }> =>
                       part.type === "text" && !part.synthetic,
                   )
                   .map((part) => part.text.trim())
@@ -1538,6 +1579,114 @@ export const layer = Layer.effect(
                 }).toObject()
                 yield* sessions.updateMessage(handle.message)
                 return "break" as const
+              }
+
+              if (SessionHarness.enabled() && execution.contract.requiredEvidence.length > 0) {
+                const current = yield* MessageV2.filterCompactedEffect(sessionID)
+                let proof = HarnessCore.proof(current, execution.contract)
+                const rolledBack: string[] = []
+                for (const candidate of HarnessCore.rollbackCandidates(current, proof)) {
+                  const content = yield* fsys
+                    .readFileString(candidate.file)
+                    .pipe(Effect.catch(() => Effect.succeed(undefined)))
+                  if (content !== candidate.content) continue
+                  yield* fsys.remove(candidate.file).pipe(Effect.catch(() => Effect.void))
+                  rolledBack.push(candidate.file)
+                  yield* HarnessRecord.write({
+                    session: sessions,
+                    sessionID,
+                    messageID: handle.message.id,
+                    taskID: execution.contract.id,
+                    kind: "scope",
+                    data: {
+                      decision: "AUTO_ROLLBACK",
+                      file: candidate.file,
+                      reason: "Task-created file was confidently unrelated and unchanged after creation.",
+                    },
+                  })
+                }
+                if (rolledBack.length) proof = HarnessCore.proof(current, execution.contract, rolledBack)
+                yield* HarnessRecord.write({
+                  session: sessions,
+                  sessionID,
+                  messageID: handle.message.id,
+                  taskID: execution.contract.id,
+                  kind: "proof",
+                  data: proof,
+                })
+                yield* HarnessRecord.write({
+                  session: sessions,
+                  sessionID,
+                  messageID: handle.message.id,
+                  taskID: execution.contract.id,
+                  kind: "telemetry",
+                  data: proof.telemetry,
+                })
+                if (!proof.stop) {
+                  const reminded = lastUserMsg?.parts.some(
+                    (part) => part.type === "text" && part.synthetic && part.text.includes("<olicode_proof_gate>"),
+                  )
+                  if (!reminded) {
+                    const reminder = yield* sessions.updatePart({
+                      id: PartID.ascending(),
+                      messageID: lastUser.id,
+                      sessionID,
+                      type: "text",
+                      text: HarnessCore.reminder(proof),
+                      synthetic: true,
+                    })
+                    lastUserMsg?.parts.push(reminder)
+                    handle.message.finish = "tool-calls"
+                    yield* sessions.updateMessage(handle.message)
+                    return "continue" as const
+                  }
+
+                  const response = [
+                    "Task not complete.",
+                    "",
+                    `Missing evidence: ${proof.missing.join(", ") || "none"}`,
+                    `Unrelated changes: ${
+                      proof.scope
+                        .filter((item) => item.classification === "UNRELATED")
+                        .map((item) => item.file)
+                        .join(", ") || "none"
+                    }`,
+                    `Telemetry: ${proof.telemetry.toolCalls} tool calls, ${proof.telemetry.filesChanged} files changed, +${proof.telemetry.additions}/-${proof.telemetry.deletions} LOC.`,
+                  ].join("\n")
+                  const parts = current
+                    .findLast((message) => message.info.id === handle.message.id)
+                    ?.parts.filter((part): part is MessageV2.TextPart => part.type === "text")
+                  if (parts?.[0]) yield* sessions.updatePart({ ...parts[0], text: response })
+                  for (const part of parts?.slice(1) ?? []) yield* sessions.updatePart({ ...part, text: "" })
+                  yield* HarnessRecord.write({
+                    session: sessions,
+                    sessionID,
+                    messageID: handle.message.id,
+                    taskID: execution.contract.id,
+                    kind: "completion",
+                    data: { decision: "BLOCK", missing: proof.missing, scope: proof.scope },
+                  })
+                  return "break" as const
+                }
+                yield* HarnessRecord.write({
+                  session: sessions,
+                  sessionID,
+                  messageID: handle.message.id,
+                  taskID: execution.contract.id,
+                  kind: "completion",
+                  data: { decision: "STOP", satisfied: proof.satisfied, scope: proof.scope },
+                })
+              }
+
+              if (SessionHarness.enabled()) {
+                const current = yield* MessageV2.filterCompactedEffect(sessionID)
+                const parts = current
+                  .findLast((message) => message.info.id === handle.message.id)
+                  ?.parts.filter((part): part is MessageV2.TextPart => part.type === "text")
+                for (const part of parts ?? []) {
+                  const text = HarnessCore.response(part.text, execution.contract.response)
+                  if (text !== part.text) yield* sessions.updatePart({ ...part, text })
+                }
               }
             }
 

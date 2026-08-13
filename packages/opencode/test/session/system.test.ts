@@ -103,8 +103,10 @@ describe("session.system", () => {
       })
 
       expect(output).toContain("<name>design-polish</name>")
-      expect(output).toContain("Other available skills by name:")
-      expect(output).toContain("browser-automation")
+      // Irrelevant skills are dropped entirely rather than listed by name --
+      // the harness intentionally keeps low-relevance skills out of the
+      // prompt to save tokens; the model can still find them via a query.
+      expect(output).not.toContain("browser-automation")
     }),
   )
 })

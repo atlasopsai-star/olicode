@@ -54,6 +54,8 @@ import { Permission } from "@/permission"
 import { Reference } from "@/reference/reference"
 import { BackgroundJob } from "@/background/job"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import type { Action, RigorLevel } from "@/session/harness"
+import { SessionHarness } from "@/session/harness"
 
 const log = Log.create({ service: "tool.registry" })
 
@@ -75,7 +77,12 @@ export interface Interface {
   readonly ids: () => Effect.Effect<string[]>
   readonly all: () => Effect.Effect<Tool.Def[]>
   readonly named: () => Effect.Effect<{ task: TaskDef; read: ReadDef }>
-  readonly tools: (model: { providerID: ProviderID; modelID: ModelID; agent: Agent.Info }) => Effect.Effect<Tool.Def[]>
+  readonly tools: (model: {
+    providerID: ProviderID
+    modelID: ModelID
+    agent: Agent.Info
+    execution?: { mode: Action; rigor: RigorLevel }
+  }) => Effect.Effect<Tool.Def[]>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ToolRegistry") {}
@@ -284,21 +291,15 @@ export const layer: Layer.Layer<
     })
 
     const describeSkill = Effect.fn("ToolRegistry.describeSkill")(function* (agent: Agent.Info) {
-      const list = yield* skill.available(agent)
-      if (list.length === 0) return "No skills are currently available."
+      if (!SessionHarness.enabled()) {
+        const list = yield* skill.available(agent)
+        return ["Load a specialized skill when a task matches its description.", "", Skill.fmt(list, { verbose: false })].join("\n")
+      }
       return [
         "Load a specialized skill that provides domain-specific instructions and workflows.",
         "",
-        "When you recognize that a task matches one of the available skills listed below, use this tool to load the full skill instructions.",
-        "",
-        "The skill will inject detailed instructions, workflows, and access to bundled resources (scripts, references, templates) into the conversation context.",
-        "",
-        'Tool output includes a `<skill_content name="...">` block with the loaded content.',
-        "",
-        "The following skills provide specialized sets of instructions for particular tasks",
-        "Invoke this tool to load a skill when a task matches one of the available skills listed below:",
-        "",
-        Skill.fmt(list, { verbose: false }),
+        "Use only a high-confidence candidate exposed in the system prompt, or search by query when no candidate fits.",
+        "The skill injects its full instructions and bundled resource locations into context.",
       ].join("\n")
     })
 
@@ -319,6 +320,17 @@ export const layer: Layer.Layer<
 
     const tools: Interface["tools"] = Effect.fn("ToolRegistry.tools")(function* (input) {
       const filtered = (yield* all()).filter((tool) => {
+        if (input.execution?.rigor === "FAST" && ["task", "fetch", "search", "skill", "todo"].includes(tool.id))
+          return false
+        // task (subagent dispatch) stays available for inspect/research -- those
+        // actions are exactly when spinning up an investigation subagent is
+        // warranted; blocking it hangs any subagent dispatch in that mode.
+        if (
+          input.execution &&
+          ["answer", "inspect", "research"].includes(input.execution.mode) &&
+          ["edit", "write", "patch", "todo"].includes(tool.id)
+        )
+          return false
         if (tool.id === WebSearchTool.id) {
           return webSearchEnabled(input.providerID, { exa: flags.enableExa, parallel: flags.enableParallel })
         }

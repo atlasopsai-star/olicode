@@ -22,6 +22,9 @@ import { ChildProcess } from "effect/unstable/process"
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
 import { ShellPrompt, type Parameters } from "./shell/prompt"
 import { BashArity } from "@/permission/arity"
+import type { Execution } from "@/session/harness"
+import { ScopeGuard } from "@/session/scope-guard"
+import { ShellPolicy, type ShellMutation } from "@/session/shell-policy"
 
 export { Parameters } from "./shell/prompt"
 
@@ -429,6 +432,8 @@ export const ShellTool = Tool.define(
         env: NodeJS.ProcessEnv
         timeout: number
         description: string
+        mutation: ShellMutation
+        mutationPaths: string[]
       },
       ctx: Tool.Context,
     ) {
@@ -473,6 +478,8 @@ export const ShellTool = Tool.define(
         metadata: {
           output: "",
           description: input.description,
+          mutation: input.mutation,
+          mutationPaths: input.mutationPaths,
         },
       })
 
@@ -588,6 +595,8 @@ export const ShellTool = Tool.define(
           output: last || preview(output),
           exit: code,
           description: input.description,
+          mutation: input.mutation,
+          mutationPaths: input.mutationPaths,
           truncated: cut,
           ...(cut && file ? { outputPath: file } : {}),
         },
@@ -609,10 +618,56 @@ export const ShellTool = Tool.define(
           parameters: prompt.parameters,
           execute: (params: Parameters, ctx: Tool.Context) =>
             Effect.gen(function* () {
+              const execution = ctx.extra?.execution as Execution | undefined
+              if (
+                execution?.contract.budgets.maxNewDependencies === 0 &&
+                ShellPolicy.installsDependency(params.command)
+              )
+                return yield* Effect.die(
+                  new Error(
+                    "OliHarness blocked dependency installation: the task contract allows no new dependencies. Reuse existing code, platform APIs, the standard library, or installed dependencies.",
+                  ),
+                )
               const instanceCtx = yield* InstanceState.context
               const cwd = params.workdir
                 ? yield* resolvePath(params.workdir, instanceCtx.directory, shell)
                 : instanceCtx.directory
+              const mutation = ShellPolicy.classify(params.command)
+              const mutationPaths = ShellPolicy.paths(params.command).map((item) => path.resolve(cwd, item))
+              if (execution && mutation !== "READ_ONLY") {
+                const decisions = yield* Effect.forEach(mutationPaths, (filePath) =>
+                  Effect.gen(function* () {
+                    return {
+                      filePath,
+                      decision: ScopeGuard.inspectMutation({
+                        filePath,
+                        exists: yield* fs.existsSafe(filePath),
+                        messages: ctx.messages,
+                        contract: execution.contract,
+                      }),
+                    }
+                  }),
+                )
+                const unrelated = decisions.find((item) => item.decision.classification === "UNRELATED")
+                if (mutation === "EXPECTED_MUTATION" && unrelated)
+                  return yield* Effect.die(
+                    new Error(
+                      `OliHarness blocked shell mutation of ${unrelated.filePath}: ${unrelated.decision.reason}`,
+                    ),
+                  )
+                if (
+                  mutation === "DESTRUCTIVE" ||
+                  mutation === "UNKNOWN_MUTATION" ||
+                  mutationPaths.length === 0 ||
+                  decisions.some((item) => item.decision.classification === "UNKNOWN")
+                )
+                  yield* ctx.ask({
+                    permission: "shell_mutation",
+                    patterns: [mutation, ...mutationPaths],
+                    always: [],
+                    metadata: { command: params.command, classification: mutation, paths: mutationPaths },
+                  })
+              }
               if (params.timeout !== undefined && params.timeout < 0) {
                 throw new Error(`Invalid timeout value: ${params.timeout}. Timeout must be a positive number.`)
               }
@@ -637,6 +692,8 @@ export const ShellTool = Tool.define(
                   env: yield* shellEnv(ctx, cwd),
                   timeout,
                   description: params.description,
+                  mutation,
+                  mutationPaths,
                 },
                 ctx,
               )

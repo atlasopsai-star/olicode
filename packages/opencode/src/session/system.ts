@@ -84,6 +84,12 @@ export const layer = Layer.effect(
         const list = yield* skill.available(input.agent)
         const described = list.filter((item) => item.description !== undefined)
         if (described.length === 0) return "No skills are currently available."
+        if (!SessionHarness.enabled())
+          return [
+            "Skills provide specialized instructions and workflows for specific tasks.",
+            "Use the skill tool to load a skill when a task matches its description.",
+            Skill.fmt(described, { verbose: true }),
+          ].join("\n")
         if (!input.query) {
           return [
             "Skills provide specialized instructions and workflows for specific tasks.",
@@ -92,11 +98,12 @@ export const layer = Layer.effect(
           ].join("\n")
         }
 
+        if (SessionHarness.rigor(input.query) === "FAST") return
+
         const scored = described
-          .map((item) => ({ item, score: scoreSkill(item, input.query) }))
+          .map((item) => ({ item, metadata: Skill.metadata(item), score: scoreSkill(item, input.query) }))
           .sort((a, b) => b.score - a.score || a.item.name.localeCompare(b.item.name))
-        const detailed = scored.filter((item) => item.score > 0).slice(0, 6).map((item) => item.item)
-        const additional = described.filter((item) => !detailed.some((picked) => picked.name === item.name))
+        const detailed = scored.filter((item) => item.score >= 2).slice(0, 3)
 
         return [
           "Skills provide specialized instructions and workflows for specific tasks.",
@@ -104,21 +111,19 @@ export const layer = Layer.effect(
           detailed.length
             ? [
                 "<relevant_skills>",
-                ...detailed.flatMap((item) => [
+                ...detailed.flatMap(({ item, metadata }) => [
                   "  <skill>",
                   `    <name>${item.name}</name>`,
                   `    <description>${item.description}</description>`,
+                  `    <modes>${metadata.modes.join(",")}</modes>`,
+                  `    <expected_value>${metadata.expectedValue}</expected_value>`,
+                  `    <estimated_cost>${metadata.tokenCost} tokens + ${metadata.toolCost} tool call</estimated_cost>`,
                   "  </skill>",
                 ]),
                 "</relevant_skills>",
               ].join("\n")
             : "No strongly relevant skills were detected from the current request.",
-          additional.length
-            ? `Other available skills by name: ${additional
-                .map((item) => item.name)
-                .toSorted((a, b) => a.localeCompare(b))
-                .join(", ")}`
-            : undefined,
+          "If no candidate fits and specialist knowledge is materially necessary, use the skill tool's query field to search compact metadata.",
         ]
           .filter(Boolean)
           .join("\n")

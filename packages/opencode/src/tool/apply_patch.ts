@@ -14,6 +14,8 @@ import DESCRIPTION from "./apply_patch.txt"
 import { File } from "../file"
 import { Format } from "../format"
 import * as Bom from "@/util/bom"
+import { ScopeGuard } from "@/session/scope-guard"
+import type { Execution } from "@/session/harness"
 
 export const Parameters = Schema.Struct({
   patchText: Schema.String.annotate({ description: "The full patch text that describes all changes to be made" }),
@@ -72,6 +74,17 @@ export const ApplyPatchTool = Tool.define(
       for (const hunk of hunks) {
         const filePath = path.resolve(instance.directory, hunk.path)
         yield* assertExternalDirectoryEffect(ctx, filePath)
+        const execution = ctx.extra?.execution as Execution | undefined
+        if (execution) {
+          const decision = ScopeGuard.inspectMutation({
+            filePath,
+            exists: hunk.type !== "add",
+            messages: ctx.messages,
+            contract: execution.contract,
+          })
+          if (decision.classification === "UNRELATED")
+            return yield* Effect.die(new Error(`OliHarness blocked patch to ${filePath}: ${decision.reason}`))
+        }
 
         switch (hunk.type) {
           case "add": {
@@ -141,6 +154,16 @@ export const ApplyPatchTool = Tool.define(
 
             const movePath = hunk.move_path ? path.resolve(instance.directory, hunk.move_path) : undefined
             yield* assertExternalDirectoryEffect(ctx, movePath)
+            if (execution && movePath) {
+              const decision = ScopeGuard.inspectMutation({
+                filePath: movePath,
+                exists: false,
+                messages: ctx.messages,
+                contract: execution.contract,
+              })
+              if (decision.classification === "UNRELATED")
+                return yield* Effect.die(new Error(`OliHarness blocked move to ${movePath}: ${decision.reason}`))
+            }
 
             fileChanges.push({
               filePath,

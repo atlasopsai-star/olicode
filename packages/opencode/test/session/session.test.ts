@@ -13,6 +13,8 @@ import { Storage } from "@/storage/storage"
 import { SyncEvent } from "@/sync"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { BackgroundJob } from "@/background/job"
+import { HarnessRecord } from "@/session/harness-record"
+import { ModelID, ProviderID } from "@/provider/schema"
 
 void Log.init({ print: false })
 
@@ -28,6 +30,35 @@ const it = testEffect(
     CrossSpawnSpawner.defaultLayer,
   ),
 )
+
+describe("harness records", () => {
+  it.instance("persist as structured message parts", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionNs.Service
+      const info = yield* session.create({})
+      const messageID = MessageID.ascending()
+      yield* session.updateMessage({
+        id: messageID,
+        sessionID: info.id,
+        role: "user",
+        time: { created: Date.now() },
+        agent: "build",
+        model: { providerID: ProviderID.make("test"), modelID: ModelID.make("test") },
+      })
+      const part = yield* HarnessRecord.write({
+        session,
+        sessionID: info.id,
+        messageID,
+        taskID: "task-test",
+        kind: "contract",
+        data: { objective: "test persistence" },
+      })
+      const stored = yield* session.getPart({ sessionID: info.id, messageID, partID: part.id })
+      expect(stored?.type).toBe("harness")
+      if (stored?.type === "harness") expect(stored.data.objective).toBe("test persistence")
+    }),
+  )
+})
 
 const awaitDeferred = <T>(deferred: Deferred.Deferred<T>, message: string) =>
   Effect.race(

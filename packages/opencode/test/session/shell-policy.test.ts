@@ -1,0 +1,41 @@
+import { describe, expect, test } from "bun:test"
+import { ShellPolicy } from "../../src/session/shell-policy"
+
+describe("shell policy", () => {
+  test("keeps normal inspection and verification read-only", () => {
+    for (const command of [
+      "git status --short",
+      "git diff --check",
+      "rg -n button src",
+      "cat src/ui.ts",
+      "bun test fixture.test.ts",
+      "bun run typecheck",
+      "bun run build",
+    ])
+      expect(ShellPolicy.classify(command)).toBe("READ_ONLY")
+  })
+
+  test("detects expected mutations", () => {
+    for (const command of [
+      "touch src/new.ts",
+      "mkdir src/generated",
+      "cp src/a.ts src/b.ts",
+      "sed -i '' s/a/b/ src/a.ts",
+      "prettier --write src/a.ts",
+      "printf value | tee src/a.ts",
+      "printf value > src/a.ts",
+      "bun add zod",
+    ])
+      expect(ShellPolicy.classify(command)).toBe("EXPECTED_MUTATION")
+  })
+
+  test("detects destructive and unknown commands", () => {
+    expect(ShellPolicy.classify("rm src/a.ts")).toBe("DESTRUCTIVE")
+    expect(ShellPolicy.classify("git restore src/a.ts")).toBe("DESTRUCTIVE")
+    expect(ShellPolicy.classify("bash -c 'do something'")).toBe("UNKNOWN_MUTATION")
+  })
+
+  test("extracts file-like mutation targets", () => {
+    expect(ShellPolicy.paths("cp src/a.ts src/b.ts")).toEqual(["src/a.ts", "src/b.ts"])
+  })
+})

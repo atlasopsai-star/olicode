@@ -1,134 +1,275 @@
 import type { Agent } from "@/agent/agent"
 
-export type Mode = "build" | "debug" | "design" | "research" | "browser" | "ship"
-export type Rigor = "fast" | "standard"
+export type Action = "answer" | "inspect" | "change" | "debug" | "design" | "research" | "browser" | "ship"
+export type RigorLevel = "FAST" | "STANDARD" | "DEEP" | "DEBUG" | "DESIGN" | "RESEARCH" | "BROWSER" | "SHIP"
+export type ResponseDetail = "tight" | "normal" | "detailed"
 
-const ORDER: Mode[] = ["browser", "debug", "design", "ship", "research", "build"]
-
-const FAST_SIGNALS = new Set(["typo", "rename", "copy", "label", "wording", "comment", "tiny", "quick"])
-const MULTI_STEP_SIGNALS = ["and then", "also", "as well as", "after that", "additionally"]
-
-const KEYWORDS: Record<Mode, string[]> = {
-  browser: ["browser", "playwright", "web", "website", "checkout", "login", "click", "navigate", "dom"],
-  debug: ["bug", "debug", "fix", "failing", "failure", "error", "broken", "regression", "traceback"],
-  design: ["design", "redesign", "ui", "ux", "landing", "visual", "visually", "polish", "brand", "premium"],
-  ship: ["deploy", "release", "launch", "ship", "production", "prod", "publish"],
-  research: ["research", "compare", "evaluate", "investigate", "benchmark", "analyze", "analysis"],
-  build: ["build", "code", "implement", "feature", "refactor", "app", "backend", "frontend", "integrate"],
+export type EvidenceRequirement = {
+  id: "change" | "validation" | "tests" | "typecheck" | "build" | "scope" | "browser" | "git" | "deploy"
+  description: string
 }
 
-const STOP_WORDS = new Set([
-  "the",
-  "and",
-  "with",
-  "that",
-  "this",
-  "from",
-  "into",
-  "your",
-  "make",
-  "keep",
-  "just",
-  "have",
-  "will",
-])
+export type OliTaskContract = {
+  id: string
+  objective: string
+  action: Action
+  acceptanceCriteria: string[]
+  nonGoals: string[]
+  allowedScope: string[]
+  protectedScope: string[]
+  requiredEvidence: EvidenceRequirement[]
+  rigor: RigorLevel
+  response: ResponseDetail
+  budgets: {
+    expectedFiles?: number
+    maxNewDependencies?: number
+    toolCallSoftLimit?: number
+    inputTokenSoftLimit?: number
+  }
+}
+
+export type Execution = {
+  mode: Action
+  rigor: RigorLevel
+  objective: string
+  contract: OliTaskContract
+  browser?: { objective: string; checkpoints: string[] }
+}
+
+const MUTATION = ["add", "build", "change", "create", "edit", "fix", "implement", "remove", "rename", "update"]
+const DEBUG = ["bug", "debug", "error", "failing", "failure", "regression", "traceback"]
+const DESIGN = ["design", "frontend", "landing", "polish", "redesign", "ui", "ux", "visual"]
+const RESEARCH = ["analyze", "audit", "compare", "evaluate", "inspect", "investigate", "research", "review"]
+const BROWSER = ["browser", "click", "dom", "navigate", "playwright", "screenshot"]
+const SHIP = ["deploy", "launch", "pr", "production", "publish", "push", "release", "ship", "vercel"]
+const HIGH_RISK = [
+  "auth",
+  "billing",
+  "credential",
+  "database",
+  "migration",
+  "payment",
+  "permission",
+  "security",
+  "token",
+]
+const MULTI_STEP = ["and then", "also", "as well as", "after that", "additionally"]
+const PATH = /(?:^|\s)([\w@.-]+(?:\/[\w@.-]+)+)(?=$|[\s,;:)])/g
+const FILE =
+  /(?:^|\s)([\w@.-]+\.(?:c|cc|cpp|css|go|html|java|js|json|jsx|kt|md|py|rs|sh|swift|toml|ts|tsx|yaml|yml))(?=$|[\s,;:)])/gi
+const PROTECTED = [".env", ".git/", "bun.lock", "package-lock.json", "pnpm-lock.yaml", "yarn.lock"]
+const STOP_WORDS = new Set(["and", "for", "the", "this", "that", "to", "use", "with"])
+
+export function enabled() {
+  return process.env.OLICODE_HARNESS !== "0"
+}
 
 function tokenize(text: string) {
   return text
     .toLowerCase()
-    .split(/[^a-z0-9]+/)
-    .filter((part) => part.length >= 3)
+    .split(/[^a-z0-9_.@/-]+/)
+    .filter((part) => part.length >= 2)
 }
 
-export function classify(text: string): Mode {
-  const tokens = tokenize(text)
-  if (tokens.length === 0) return "build"
-
-  const scores = Object.fromEntries(
-    ORDER.map((mode) => [
-      mode,
-      KEYWORDS[mode].reduce((total, keyword) => total + (tokens.includes(keyword) ? 1 : 0), 0),
-    ]),
-  ) as Record<Mode, number>
-
-  return ORDER.reduce((best, mode) => {
-    if (scores[mode] > scores[best]) return mode
-    return best
-  }, "build" as Mode)
+function contains(tokens: string[], values: string[]) {
+  return values.some((value) => tokens.includes(value))
 }
 
-export function rigor(text: string): Rigor {
-  const tokens = tokenize(text)
-  if (tokens.length === 0) return "standard"
-  const lower = text.toLowerCase()
-  if (MULTI_STEP_SIGNALS.some((signal) => lower.includes(signal))) return "standard"
-  if (tokens.length > 25) return "standard"
-  if (tokens.length <= 8) return "fast"
-  return tokens.some((token) => FAST_SIGNALS.has(token)) ? "fast" : "standard"
+function stableID(text: string) {
+  let hash = 2166136261
+  for (const value of text) {
+    hash ^= value.charCodeAt(0)
+    hash = Math.imul(hash, 16777619)
+  }
+  return `task-${(hash >>> 0).toString(36)}`
 }
 
 export function objective(query: string) {
-  return query
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 160)
+  return query.replace(/\s+/g, " ").trim().slice(0, 240)
 }
 
-export function browserMetadata(query: string) {
-  const values = tokenize(query).filter((part) => !STOP_WORDS.has(part)).slice(0, 6)
+export function action(query: string): Action {
+  const tokens = tokenize(query)
+  if (contains(tokens, SHIP)) return "ship"
+  if (contains(tokens, BROWSER)) return "browser"
+  if (contains(tokens, DESIGN)) return "design"
+  if (contains(tokens, DEBUG)) return "debug"
+  if (contains(tokens, MUTATION)) return "change"
+  if (contains(tokens, RESEARCH))
+    return tokens.includes("inspect") || tokens.includes("review") || tokens.includes("audit") ? "inspect" : "research"
+  return "answer"
+}
+
+export function routeMode(query: string): "build" | "debug" | "design" | "research" | "browser" | "ship" {
+  const selected = action(query)
+  if (selected === "answer" || selected === "change") return "build"
+  if (selected === "inspect") return "research"
+  return selected
+}
+
+function expectedFiles(query: string, selected: Action) {
+  const paths = [...query.matchAll(PATH)].length
+  if (paths > 0) return Math.min(paths, 10)
+  if (selected === "answer" || selected === "inspect" || selected === "research") return 0
+  if (/\b(tiny|typo|label|wording|rename)\b/i.test(query)) return 1
+  return selected === "ship" || selected === "design" ? 5 : 3
+}
+
+export function rigor(query: string, selected = action(query)): RigorLevel {
+  if (selected === "ship") return "SHIP"
+  if (selected === "browser") return "BROWSER"
+  if (selected === "design") return "DESIGN"
+  if (selected === "debug") return "DEBUG"
+  if (selected === "research" || selected === "inspect") return "RESEARCH"
+  const tokens = tokenize(query)
+  if (contains(tokens, HIGH_RISK) || /\b(across|architecture|large|many|system-wide)\b/i.test(query)) return "DEEP"
+  if (
+    selected === "change" &&
+    tokens.length <= 12 &&
+    !MULTI_STEP.some((signal) => query.toLowerCase().includes(signal)) &&
+    expectedFiles(query, selected) <= 1
+  )
+    return "FAST"
+  return "STANDARD"
+}
+
+function evidence(query: string, selected: Action, level: RigorLevel): EvidenceRequirement[] {
+  if (selected === "answer" || selected === "inspect" || selected === "research") return []
+  const base: EvidenceRequirement[] = [
+    { id: "change", description: "The requested change is present." },
+    { id: "validation", description: "A targeted validation completed successfully." },
+    { id: "scope", description: "Every changed file is relevant to the task contract." },
+  ]
+  const explicit = [
+    [/\btest(?:s|ing)?\b/i, { id: "tests", description: "The user-requested tests passed." }],
+    [/\btypecheck|type check\b/i, { id: "typecheck", description: "The user-requested type check passed." }],
+    [
+      /\b(?:run|verify|ensure|check) (?:the )?build\b|\bbuild (?:passes|must pass)\b/i,
+      { id: "build", description: "The user-requested build passed." },
+    ],
+    [/\bdeploy|vercel\b/i, { id: "deploy", description: "The requested deployment completed and returned a result." }],
+  ].flatMap(([pattern, requirement]) => ((pattern as RegExp).test(query) ? [requirement as EvidenceRequirement] : []))
+  if (level === "FAST") return [...base, ...explicit.filter((item) => !base.some((base) => base.id === item.id))]
+  if (level === "DESIGN")
+    return [
+      ...base,
+      { id: "build", description: "The project builds." },
+      { id: "browser", description: "The rendered result was checked in a browser." },
+    ]
+  if (level === "BROWSER") return [{ id: "browser", description: "The requested browser assertions passed." }]
+  if (level === "SHIP")
+    return [
+      ...base,
+      { id: "tests", description: "Required tests passed." },
+      { id: "git", description: "Git state and requested remote result were verified." },
+    ]
+  const standard: EvidenceRequirement[] = [
+    ...base,
+    { id: "tests", description: "Relevant tests or type checks passed." },
+    ...explicit,
+  ]
+  return standard.filter((item, index, list) => list.findIndex((candidate) => candidate.id === item.id) === index)
+}
+
+function sentences(query: string) {
+  return query
+    .split(/(?:\n+|(?<=[.!?])\s+)/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+}
+
+function acceptanceCriteria(query: string, selected: Action) {
+  const explicit = sentences(query).filter((item) =>
+    /\b(?:must|should|ensure|verify|pass|without|only|do not|don't|never)\b/i.test(item),
+  )
+  const outcome =
+    selected === "answer" || selected === "inspect" || selected === "research"
+      ? "The requested analysis or answer addresses the stated outcome."
+      : "The requested behavior is implemented and observable."
+  return [outcome, ...explicit].slice(0, 8)
+}
+
+function nonGoals(query: string) {
+  const explicit = sentences(query).filter((item) => /\b(?:do not|don't|never|without adding|no new)\b/i.test(item))
+  return [...explicit, "Unrequested refactors, cleanup, dependencies, or features."].slice(0, 8)
+}
+
+function scopes(query: string) {
+  const explicit = [...query.matchAll(PATH), ...query.matchAll(FILE)].flatMap((match) =>
+    match[1] ? [match[1].replace(/[.,]$/, "")] : [],
+  )
+  return explicit.length ? [...new Set(explicit)] : ["."]
+}
+
+export function contract(query: string): OliTaskContract {
+  const selected = action(query)
+  const level = rigor(query, selected)
+  const files = expectedFiles(query, selected)
   return {
+    id: stableID(query),
     objective: objective(query),
-    checkpoints: values,
+    action: selected,
+    acceptanceCriteria: acceptanceCriteria(query, selected),
+    nonGoals: nonGoals(query),
+    allowedScope: scopes(query),
+    protectedScope: PROTECTED,
+    requiredEvidence: evidence(query, selected, level),
+    rigor: level,
+    response: "tight",
+    budgets: {
+      expectedFiles: files,
+      maxNewDependencies: /\b(add|install) (?:a )?dependenc/i.test(query) ? 1 : 0,
+      toolCallSoftLimit: level === "FAST" ? 6 : level === "DEEP" ? 30 : 18,
+      inputTokenSoftLimit: level === "FAST" ? 12_000 : level === "DEEP" ? 80_000 : 40_000,
+    },
   }
 }
 
-export function execution(input: { query: string }) {
-  const mode = classify(input.query)
+export function browserMetadata(query: string) {
   return {
-    mode,
-    rigor: rigor(input.query),
-    objective: objective(input.query),
-    ...(mode === "browser" ? { browser: browserMetadata(input.query) } : {}),
+    objective: objective(query),
+    checkpoints: tokenize(query)
+      .filter((part) => !STOP_WORDS.has(part))
+      .slice(0, 6),
+  }
+}
+
+export function execution(input: { query: string }): Execution {
+  const active = contract(input.query)
+  return {
+    mode: active.action,
+    rigor: active.rigor,
+    objective: active.objective,
+    contract: active,
+    ...(active.action === "browser" ? { browser: browserMetadata(input.query) } : {}),
   }
 }
 
 export function render(input: { agent: Agent.Info; query: string }) {
-  const details = execution({ query: input.query })
-  const lines = [
+  if (!enabled()) return ""
+  const active = contract(input.query)
+  return [
     "<olicode_harness>",
-    `Mode: ${details.mode}`,
-    `Rigor: ${details.rigor}`,
-    "Stay tightly focused on the user's main objective.",
-    "Keep progress updates and final answers short, direct, and high-signal.",
-    "Do not repeat the user's request, narrate obvious steps, or drift into unrelated research.",
-    "Prefer the smallest correct change over broad rewrites or speculative abstractions.",
-    "Load only the skills and tools that directly help with the current task.",
-    "Do not perform extra unrequested changes (\"while I'm here...\", drive-by cleanup, extra refactors) unless explicitly asked.",
-    "Stop once the requested outcome is achieved and verified.",
+    `Task: ${active.id}`,
+    `Action: ${active.action}`,
+    `Rigor: ${active.rigor}`,
+    `Objective: ${active.objective}`,
+    `Expected files: ${active.budgets.expectedFiles ?? "unknown"}`,
+    `New dependency budget: ${active.budgets.maxNewDependencies ?? 0}`,
+    "Use the smallest correct implementation. Reuse existing code, platform behavior, standard library, and installed dependencies before adding code or dependencies.",
+    "Every substantial action must materially help the task contract. Do not perform drive-by cleanup, unrelated formatting, or speculative work.",
+    active.rigor === "FAST"
+      ? "Inspect the target, make the surgical edit, verify narrowly, and stop."
+      : "Verify the acceptance criteria and changed-file scope before finishing.",
+    input.agent.name === "plan" ? "Plan precisely. Do not implement code in this mode." : undefined,
+    "Final response style: tight. State outcome, changed files, verification, and unresolved issues only.",
+    "</olicode_harness>",
   ]
-
-  if (details.rigor === "fast")
-    lines.push(
-      "This looks like a small, well-scoped change. Skip upfront planning ceremony and broad exploration — read only what's directly needed, make the minimal edit, verify narrowly, and stop.",
-    )
-  else
-    lines.push(
-      "Before reporting this task complete, call scope_check to confirm you haven't edited files you never read.",
-    )
-
-  if (input.agent.name === "plan") lines.push("Plan precisely. Do not implement code in this mode.")
-  if (details.mode === "build") lines.push("Read the relevant code, make a tight plan, implement the minimum high-quality diff, and verify it.")
-  if (details.mode === "debug") lines.push("Find the root cause before changing code. Fix the source of the problem, not just the symptom.")
-  if (details.mode === "design")
-    lines.push("Aim for premium, non-generic design quality: strong hierarchy, spacing, typography, motion restraint, and polished interactions.")
-  if (details.mode === "research")
-    lines.push("Research only what directly informs the next decision. Synthesize findings briefly, then move back to execution.")
-  if (details.mode === "browser")
-    lines.push("Use browser workflows when they materially advance the task. Keep browser exploration purposeful and concise.")
-  if (details.mode === "ship") lines.push("Prioritize production readiness: verify tests, build health, deployment steps, and user-facing quality before finishing.")
-
-  lines.push("</olicode_harness>")
-  return lines.join("\n")
+    .filter(Boolean)
+    .join("\n")
 }
+
+// Kept for compatibility with callers and extensions using the original six-mode API.
+export const classify = routeMode
 
 export * as SessionHarness from "./harness"

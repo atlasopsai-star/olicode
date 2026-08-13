@@ -3,6 +3,7 @@ import { ScopeGuard } from "../../src/session/scope-guard"
 import type { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { ProviderID, ModelID } from "../../src/provider/schema"
+import { SessionHarness } from "../../src/session/harness"
 
 let seq = 0
 
@@ -75,5 +76,35 @@ describe("ScopeGuard.scan", () => {
 
   test("empty conversation yields empty report", () => {
     expect(ScopeGuard.scan([])).toEqual({ seen: [], edited: [], unexamined: [] })
+  })
+
+  test("blocks protected lockfile churn unless explicitly requested", () => {
+    const decision = ScopeGuard.inspectMutation({
+      filePath: "bun.lock",
+      exists: true,
+      messages: [read("bun.lock")],
+      contract: SessionHarness.contract("Change src/button.ts label"),
+    })
+    expect(decision.classification).toBe("UNRELATED")
+  })
+
+  test("allows an inspected file in explicit scope", () => {
+    const decision = ScopeGuard.inspectMutation({
+      filePath: "/repo/src/button.ts",
+      exists: true,
+      messages: [read("/repo/src/button.ts")],
+      contract: SessionHarness.contract("Change src/button.ts label"),
+    })
+    expect(decision.classification).toBe("REQUESTED")
+  })
+
+  test("blocks writes for inspect-only contracts", () => {
+    const decision = ScopeGuard.inspectMutation({
+      filePath: "/repo/src/button.ts",
+      exists: true,
+      messages: [read("/repo/src/button.ts")],
+      contract: SessionHarness.contract("Audit src/button.ts"),
+    })
+    expect(decision.classification).toBe("UNRELATED")
   })
 })

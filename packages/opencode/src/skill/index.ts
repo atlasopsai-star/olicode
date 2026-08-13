@@ -41,6 +41,37 @@ export const Info = Schema.Struct({
 })
 export type Info = Schema.Schema.Type<typeof Info>
 
+export type Metadata = {
+  id: string
+  modes: string[]
+  positiveTriggers: string[]
+  negativeTriggers: string[]
+  expectedValue: "low" | "medium" | "high"
+  tokenCost: number
+  toolCost: number
+}
+
+export function metadata(skill: Info): Metadata {
+  const text = `${skill.name} ${skill.description ?? ""}`.toLowerCase()
+  const signals: Array<[RegExp, string]> = [
+    [/design|ui|ux|frontend/, "design"],
+    [/browser|playwright|web qa/, "browser"],
+    [/research|search|documentation/, "research"],
+    [/deploy|release|vercel|github|git/, "ship"],
+    [/debug|diagnos|test/, "debug"],
+  ]
+  const modes = signals.flatMap(([pattern, mode]) => (pattern.test(text) ? [mode] : []))
+  return {
+    id: skill.name,
+    modes: modes.length ? modes : ["change", "inspect"],
+    positiveTriggers: [...new Set(text.split(/[^a-z0-9-]+/).filter((part) => part.length >= 4))].slice(0, 12),
+    negativeTriggers: ["tiny", "typo", "rename", "wording"],
+    expectedValue: skill.description && skill.description.length >= 80 ? "high" : "medium",
+    tokenCost: Math.max(1, Math.ceil(skill.content.length / 4)),
+    toolCost: 1,
+  }
+}
+
 const Issue = Schema.StructWithRest(
   Schema.Struct({
     message: Schema.String,

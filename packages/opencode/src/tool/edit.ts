@@ -18,6 +18,8 @@ import { Snapshot } from "@/snapshot"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import * as Bom from "@/util/bom"
+import { ScopeGuard } from "@/session/scope-guard"
+import type { Execution } from "@/session/harness"
 
 function normalizeLineEndings(text: string): string {
   return text.replaceAll("\r\n", "\n")
@@ -81,6 +83,18 @@ export const EditTool = Tool.define(
             ? params.filePath
             : path.join(instance.directory, params.filePath)
           yield* assertExternalDirectoryEffect(ctx, filePath)
+
+          const execution = ctx.extra?.execution as Execution | undefined
+          if (execution) {
+            const decision = ScopeGuard.inspectMutation({
+              filePath,
+              exists: yield* afs.existsSafe(filePath),
+              messages: ctx.messages,
+              contract: execution.contract,
+            })
+            if (decision.classification === "UNRELATED")
+              return yield* Effect.die(new Error(`OliHarness blocked edit to ${filePath}: ${decision.reason}`))
+          }
 
           let diff = ""
           let contentOld = ""

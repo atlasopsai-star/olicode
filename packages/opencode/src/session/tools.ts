@@ -18,6 +18,9 @@ import { SessionProcessor } from "./processor"
 import { PartID } from "./schema"
 import * as Log from "@opencode-ai/core/util/log"
 import { EffectBridge } from "@/effect/bridge"
+import type { Execution } from "./harness"
+import { HarnessCore } from "./harness-core"
+import { HarnessRecord } from "./harness-record"
 
 const log = Log.create({ service: "session.tools" })
 
@@ -25,18 +28,12 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   agent: Agent.Info
   model: Provider.Model
   session: Session.Info
+  sessionService: Session.Interface
   processor: Pick<SessionProcessor.Handle, "message" | "updateToolCall" | "completeToolCall">
   bypassAgentCheck: boolean
   messages: MessageV2.WithParts[]
   promptOps: TaskPromptOps
-  execution?: {
-    mode: string
-    objective: string
-    browser?: {
-      objective: string
-      checkpoints: string[]
-    }
-  }
+  execution?: Execution
 }) {
   using _ = log.time("resolveTools")
   const tools: Record<string, AITool> = {}
@@ -89,6 +86,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
     modelID: ModelID.make(input.model.api.id),
     providerID: input.model.providerID,
     agent: input.agent,
+    execution: input.execution,
   })) {
     const schema = ProviderTransform.schema(input.model, ToolJsonSchema.fromTool(item))
     tools[item.id] = tool({
@@ -98,6 +96,17 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
         return run.promise(
           Effect.gen(function* () {
             const ctx = context(args, options)
+            const telemetry = HarnessCore.telemetry(input.messages)
+            if (
+              input.execution?.rigor === "FAST" &&
+              telemetry.toolCalls >= (input.execution.contract.budgets.toolCallSoftLimit ?? Infinity) &&
+              ["read", "grep", "glob", "search", "fetch"].includes(item.id)
+            )
+              return yield* Effect.fail(
+                new Error(
+                  "OliHarness exploration budget reached. Reuse existing findings, make the requested change, verify, and stop.",
+                ),
+              )
             yield* plugin.trigger(
               "tool.execute.before",
               { tool: item.id, sessionID: ctx.sessionID, callID: ctx.callID },
@@ -118,6 +127,19 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
               { tool: item.id, sessionID: ctx.sessionID, callID: ctx.callID, args },
               output,
             )
+            if (input.execution && ["skill", "scope_check", "shell", "edit", "write", "patch"].includes(item.id))
+              yield* HarnessRecord.write({
+                session: input.sessionService,
+                sessionID: input.session.id,
+                messageID: input.processor.message.id,
+                taskID: input.execution.contract.id,
+                kind: item.id === "skill" ? "skill" : "scope",
+                data: {
+                  tool: item.id,
+                  input: args,
+                  metadata: output.metadata,
+                },
+              })
             if (options.abortSignal?.aborted) {
               yield* input.processor.completeToolCall(options.toolCallId, output)
             }

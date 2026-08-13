@@ -225,8 +225,11 @@ describe("tool parameters", () => {
     test("accepts name", () => {
       expect(parse(Skill, { name: "foo" }).name).toBe("foo")
     })
-    test("rejects missing name", () => {
-      expect(accepts(Skill, {})).toBe(false)
+    test("accepts a query in place of an explicit name", () => {
+      expect(parse(Skill, { query: "deploy to vercel" }).query).toBe("deploy to vercel")
+    })
+    test("accepts neither name nor query at the schema level (execute() rejects it at runtime)", () => {
+      expect(accepts(Skill, {})).toBe(true)
     })
   })
 
