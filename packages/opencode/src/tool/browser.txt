@@ -7,7 +7,7 @@ Actions:
 - snapshot: re-read the current page's interactive elements without navigating.
 - click: click the element at "index".
 - type: fill the element at "index" with "value".
-- screenshot: capture the current page as an image.
+- screenshot: capture the current page as an image. Pass "path" to save it to a file instead of returning it inline.
 - text: return the page's visible text content, truncated.
 - console: return recent console messages and page errors.
 - back: go back to the previous page.

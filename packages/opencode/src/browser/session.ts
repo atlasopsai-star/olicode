@@ -15,10 +15,9 @@ type Entry = {
 }
 
 export interface Interface {
-  readonly page: (sessionID: string) => Effect.Effect<Page>
+  readonly run: <A>(sessionID: string, fn: (page: Page) => Promise<A>) => Effect.Effect<A>
   readonly console: (sessionID: string) => Effect.Effect<string[]>
   readonly close: (sessionID: string) => Effect.Effect<void>
-  readonly touch: (sessionID: string) => Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/BrowserSession") {}
@@ -41,34 +40,40 @@ export const layer = Layer.effect(
     // are not. Launched lazily on first use, shared for the process lifetime.
     let browserPromise: Promise<Browser> | undefined
     const entries = new Map<string, Entry>()
+    // Models are explicitly encouraged to parallelize independent tool calls,
+    // but a single Playwright Page is not safe under concurrent actions (a
+    // "close" racing a "screenshot" produces a blank capture, for example).
+    // Every action for a session chains onto this queue, kept separate from
+    // `entries` so it's available before the browser entry itself exists.
+    const queues = new Map<string, Promise<unknown>>()
 
-    const browser = Effect.fn("BrowserSession.browser")(function* () {
+    const browser = () => {
       if (!browserPromise) browserPromise = launchBrowser()
-      return yield* Effect.promise(() => browserPromise!)
-    })
+      return browserPromise
+    }
 
-    const sweep = Effect.fn("BrowserSession.sweep")(function* (except: string) {
+    async function sweep(except: string) {
       const now = Date.now()
       for (const [sessionID, entry] of entries) {
         if (sessionID === except) continue
         if (now - entry.lastUsed < IDLE_SWEEP_MS) continue
         entries.delete(sessionID)
-        yield* Effect.promise(() => entry.context.close()).pipe(Effect.catch(() => Effect.void))
+        await entry.context.close().catch(() => {})
       }
-    })
+    }
 
-    const page = Effect.fn("BrowserSession.page")(function* (sessionID: string) {
-      yield* sweep(sessionID)
+    async function ensureEntry(sessionID: string): Promise<Entry> {
+      await sweep(sessionID)
       const existing = entries.get(sessionID)
       if (existing && !existing.page.isClosed()) {
         existing.lastUsed = Date.now()
-        return existing.page
+        return existing
       }
       if (existing) entries.delete(sessionID)
 
-      const active = yield* browser()
-      const context = yield* Effect.promise(() => active.newContext())
-      const page = yield* Effect.promise(() => context.newPage())
+      const active = await browser()
+      const context = await active.newContext()
+      const page = await context.newPage()
       const logs: string[] = []
       page.on("console", (msg) => {
         logs.push(`[${msg.type()}] ${msg.text()}`)
@@ -78,29 +83,45 @@ export const layer = Layer.effect(
         logs.push(`[pageerror] ${err.message}`)
         if (logs.length > CONSOLE_LIMIT) logs.shift()
       })
-      entries.set(sessionID, { context, page, console: logs, lastUsed: Date.now() })
+      const entry: Entry = { context, page, console: logs, lastUsed: Date.now() }
+      entries.set(sessionID, entry)
       log.info("session started", { sessionID })
-      return page
-    })
+      return entry
+    }
+
+    function enqueue<A>(sessionID: string, fn: (entry: Entry) => Promise<A>): Promise<A> {
+      const previous = queues.get(sessionID) ?? Promise.resolve()
+      const result = previous.then(() => ensureEntry(sessionID).then(fn))
+      queues.set(
+        sessionID,
+        result.then(
+          () => undefined,
+          () => undefined,
+        ),
+      )
+      return result
+    }
+
+    const run = <A>(sessionID: string, fn: (page: Page) => Promise<A>) =>
+      Effect.promise(() => enqueue(sessionID, (entry) => fn(entry.page)))
 
     const consoleLog = Effect.fn("BrowserSession.console")(function* (sessionID: string) {
       return entries.get(sessionID)?.console ?? []
     })
 
-    const close = Effect.fn("BrowserSession.close")(function* (sessionID: string) {
-      const existing = entries.get(sessionID)
-      if (!existing) return
-      entries.delete(sessionID)
-      yield* Effect.promise(() => existing.context.close()).pipe(Effect.catch(() => Effect.void))
-      log.info("session closed", { sessionID })
-    })
+    const close = (sessionID: string) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(() =>
+          enqueue(sessionID, async (entry) => {
+            entries.delete(sessionID)
+            queues.delete(sessionID)
+            await entry.context.close().catch(() => {})
+          }),
+        )
+        log.info("session closed", { sessionID })
+      })
 
-    const touch = Effect.fn("BrowserSession.touch")(function* (sessionID: string) {
-      const existing = entries.get(sessionID)
-      if (existing) existing.lastUsed = Date.now()
-    })
-
-    return Service.of({ page, console: consoleLog, close, touch })
+    return Service.of({ run, console: consoleLog, close })
   }),
 )
 
