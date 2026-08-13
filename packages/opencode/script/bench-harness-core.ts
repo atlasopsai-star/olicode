@@ -6,6 +6,10 @@ const model = process.env.OLI_BENCH_MODEL
 if (!model) throw new Error("Set OLI_BENCH_MODEL to the exact provider/model used for both variants.")
 const runs = Number(process.env.OLI_BENCH_RUNS ?? 3)
 if (!Number.isInteger(runs) || runs < 1) throw new Error("OLI_BENCH_RUNS must be a positive integer.")
+const taskFilter = process.env.OLI_BENCH_TASK
+const variantFilter = process.env.OLI_BENCH_VARIANT
+const runTimeout = Number(process.env.OLI_BENCH_TIMEOUT_MS ?? 120_000)
+const output = process.env.OLI_BENCH_OUTPUT ?? path.join(os.tmpdir(), "olibench-core.json")
 
 const fixture = path.resolve(import.meta.dir, "../test/fixture/harness-benchmark")
 const tasks = JSON.parse(readFileSync(path.join(fixture, "tasks.json"), "utf8")) as Array<{
@@ -14,15 +18,29 @@ const tasks = JSON.parse(readFileSync(path.join(fixture, "tasks.json"), "utf8"))
   check: string
 }>
 
-async function command(args: string[], cwd: string, env: Record<string, string> = {}) {
+async function command(args: string[], cwd: string, env: Record<string, string> = {}, timeout?: number) {
   const started = performance.now()
-  const process = Bun.spawn(args, { cwd, env: { ...globalThis.process.env, ...env }, stdout: "pipe", stderr: "pipe" })
+  const child = Bun.spawn(args, {
+    cwd,
+    env: { ...globalThis.process.env, ...env },
+    stdout: "pipe",
+    stderr: "pipe",
+    detached: true,
+  })
+  let timedOut = false
+  const timer = timeout
+    ? setTimeout(() => {
+        timedOut = true
+        process.kill(-child.pid, "SIGKILL")
+      }, timeout)
+    : undefined
   const [stdout, stderr, exitCode] = await Promise.all([
-    new Response(process.stdout).text(),
-    new Response(process.stderr).text(),
-    process.exited,
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+    child.exited,
   ])
-  return { stdout, stderr, exitCode, milliseconds: performance.now() - started }
+  if (timer) clearTimeout(timer)
+  return { stdout, stderr, exitCode, timedOut, milliseconds: performance.now() - started }
 }
 
 function metrics(output: string) {
@@ -70,6 +88,7 @@ function metrics(output: string) {
     }, 0),
     modelTurns: steps.size,
     toolCalls: completed.length,
+    tools: completed.map((item) => item.tool).filter((item): item is string => typeof item === "string"),
     skillsLoaded: completed.filter((item) => item.tool === "skill").length,
     filesRead: new Set(
       completed
@@ -100,6 +119,7 @@ const results: Array<
     trial: number
     model: string
     success: boolean
+    timedOut: boolean
     wallMilliseconds: number
     filesChanged: number
     additions: number
@@ -108,7 +128,9 @@ const results: Array<
   }
 > = []
 for (const task of tasks) {
+  if (taskFilter && task.id !== taskFilter) continue
   for (const variant of ["stock", "olicode"] as const) {
+    if (variantFilter && variant !== variantFilter) continue
     for (let trial = 1; trial <= runs; trial++) {
       const directory = mkdtempSync(path.join(os.tmpdir(), `olibench-${task.id}-${variant}-`))
       try {
@@ -136,6 +158,7 @@ for (const task of tasks) {
           ],
           path.resolve(import.meta.dir, ".."),
           { OLICODE_HARNESS: variant === "olicode" ? "1" : "0" },
+          runTimeout,
         )
         const verification = await command(["bun", "test"], directory)
         const acceptance = await command(["bun", "-e", task.check], directory)
@@ -147,6 +170,7 @@ for (const task of tasks) {
           trial,
           model,
           success: run.exitCode === 0 && verification.exitCode === 0 && acceptance.exitCode === 0,
+          timedOut: run.timedOut,
           wallMilliseconds: Math.round(run.milliseconds),
           ...metrics(run.stdout),
           filesChanged: changed.length,
@@ -154,6 +178,7 @@ for (const task of tasks) {
           deletions: changed.reduce((total, line) => total + Number(line.split("\t")[1] || 0), 0),
           error: run.exitCode === 0 ? undefined : run.stderr.trim().slice(-1000),
         })
+        await Bun.write(output, JSON.stringify({ model, runs, trials: results }, null, 2))
       } finally {
         rmSync(directory, { recursive: true, force: true })
       }
@@ -185,7 +210,6 @@ const summary = Object.fromEntries(
 )
 
 const report = JSON.stringify({ generatedAt: new Date().toISOString(), model, runs, summary, trials: results }, null, 2)
-const output = process.env.OLI_BENCH_OUTPUT ?? path.join(os.tmpdir(), "olibench-core.json")
 await Bun.write(output, report)
 console.error(`OLIBENCH_REPORT=${output}`)
 console.log(report)

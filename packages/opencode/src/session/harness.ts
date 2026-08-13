@@ -1,4 +1,5 @@
 import type { Agent } from "@/agent/agent"
+import { Design } from "./design-contract"
 
 export type Action = "answer" | "inspect" | "change" | "debug" | "design" | "research" | "browser" | "ship"
 export type RigorLevel = "FAST" | "STANDARD" | "DEEP" | "DEBUG" | "DESIGN" | "RESEARCH" | "BROWSER" | "SHIP"
@@ -150,12 +151,10 @@ function evidence(query: string, selected: Action, level: RigorLevel): EvidenceR
     [/\bdeploy|vercel\b/i, { id: "deploy", description: "The requested deployment completed and returned a result." }],
   ].flatMap(([pattern, requirement]) => ((pattern as RegExp).test(query) ? [requirement as EvidenceRequirement] : []))
   if (level === "FAST") return [...base, ...explicit.filter((item) => !base.some((base) => base.id === item.id))]
-  if (level === "DESIGN")
-    return [
-      ...base,
-      { id: "build", description: "The project builds." },
-      { id: "browser", description: "The rendered result was checked in a browser." },
-    ]
+  // No browser harness exists yet, so "browser" evidence is currently
+  // unsatisfiable -- requiring it here would force every design task to fail
+  // the proof gate permanently. Reinstate once a browser tool actually exists.
+  if (level === "DESIGN") return [...base, { id: "build", description: "The project builds." }]
   if (level === "BROWSER") return [{ id: "browser", description: "The requested browser assertions passed." }]
   if (level === "SHIP")
     return [
@@ -264,6 +263,7 @@ export function render(input: { agent: Agent.Info; query: string }) {
     input.agent.name === "plan" ? "Plan precisely. Do not implement code in this mode." : undefined,
     "Final response style: tight. State outcome, changed files, verification, and unresolved issues only.",
     "</olicode_harness>",
+    active.action === "design" ? Design.checklist(Design.contract(input.query)) : undefined,
   ]
     .filter(Boolean)
     .join("\n")

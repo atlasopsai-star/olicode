@@ -320,6 +320,9 @@ export const layer: Layer.Layer<
 
     const tools: Interface["tools"] = Effect.fn("ToolRegistry.tools")(function* (input) {
       const filtered = (yield* all()).filter((tool) => {
+        // The completion gate always performs the authoritative post-diff scope check.
+        // Hiding the manual duplicate saves a tool turn without weakening enforcement.
+        if (input.execution && tool.id === "scope_check") return false
         if (input.execution?.rigor === "FAST" && ["task", "fetch", "search", "skill", "todo"].includes(tool.id))
           return false
         // task (subagent dispatch) stays available for inspect/research -- those
