@@ -1,0 +1,16 @@
+Drive a real Chrome browser deterministically: navigate, inspect, click, type, screenshot, read console errors, and go back.
+
+Every action returns the current page's interactive elements tagged with a stable index -- act on elements by index (e.g. click index 3), never by guessing a CSS selector. Call "snapshot" any time the element list might be stale (after a click that changed the page, for instance).
+
+Actions:
+- navigate: open a URL. Requires "url".
+- snapshot: re-read the current page's interactive elements without navigating.
+- click: click the element at "index".
+- type: fill the element at "index" with "value".
+- screenshot: capture the current page as an image.
+- text: return the page's visible text content, truncated.
+- console: return recent console messages and page errors.
+- back: go back to the previous page.
+- close: close the browser session for this conversation. Call this when you're done with browser work, not after every action.
+
+Use this only when the task actually requires interacting with a real page (testing a UI flow, checking rendered output, filling a form). For one-off HTTP fetches of static content, prefer webfetch -- it's cheaper and doesn't need a browser.
