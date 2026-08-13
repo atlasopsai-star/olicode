@@ -1,0 +1,11 @@
+Check which files you've edited in this conversation without reading them first.
+
+Call this before reporting a non-trivial task complete, or any time you want to
+confirm you haven't drifted into unrelated files. It looks at the actual tool
+calls made so far (read vs. edit/write/apply_patch) and flags edited files that
+were never read — a sign the change may be careless or out of scope, not a
+judgment about topical relevance.
+
+An empty "unexamined" list does not by itself mean the change is correct or
+in scope — it only means every edited file was read first. Still verify the
+diff matches what was actually requested.

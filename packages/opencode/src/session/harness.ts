@@ -111,6 +111,10 @@ export function render(input: { agent: Agent.Info; query: string }) {
     lines.push(
       "This looks like a small, well-scoped change. Skip upfront planning ceremony and broad exploration — read only what's directly needed, make the minimal edit, verify narrowly, and stop.",
     )
+  else
+    lines.push(
+      "Before reporting this task complete, call scope_check to confirm you haven't edited files you never read.",
+    )
 
   if (input.agent.name === "plan") lines.push("Plan precisely. Do not implement code in this mode.")
   if (details.mode === "build") lines.push("Read the relevant code, make a tight plan, implement the minimum high-quality diff, and verify it.")

@@ -24,6 +24,7 @@ import { ProviderID, type ModelID } from "../provider/schema"
 import { WebSearchTool } from "./websearch"
 import { RepoCloneTool } from "./repo_clone"
 import { RepoOverviewTool } from "./repo_overview"
+import { ScopeCheckTool } from "./scope_check"
 import { RepositoryCache } from "@/reference/repository-cache"
 import * as Log from "@opencode-ai/core/util/log"
 import { LspTool } from "./lsp"
@@ -125,6 +126,7 @@ export const layer: Layer.Layer<
     const websearch = yield* WebSearchTool
     const repoClone = yield* RepoCloneTool
     const repoOverview = yield* RepoOverviewTool
+    const scopeCheck = yield* ScopeCheckTool
     const shell = yield* ShellTool
     const globtool = yield* GlobTool
     const writetool = yield* WriteTool
@@ -236,6 +238,7 @@ export const layer: Layer.Layer<
           search: Tool.init(websearch),
           repo_clone: Tool.init(repoClone),
           repo_overview: Tool.init(repoOverview),
+          scope_check: Tool.init(scopeCheck),
           skill: Tool.init(skilltool),
           patch: Tool.init(patchtool),
           question: Tool.init(question),
@@ -259,6 +262,7 @@ export const layer: Layer.Layer<
             tool.todo,
             tool.search,
             ...(flags.experimentalScout ? [tool.repo_clone, tool.repo_overview] : []),
+            tool.scope_check,
             tool.skill,
             tool.patch,
             ...(flags.experimentalLspTool ? [tool.lsp] : []),
