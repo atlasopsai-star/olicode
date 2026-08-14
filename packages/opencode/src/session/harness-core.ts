@@ -56,6 +56,10 @@ function completedTools(messages: MessageV2.WithParts[]) {
   )
 }
 
+function isShellTool(tool: string) {
+  return tool === "bash" || tool === "shell"
+}
+
 const emptyTimings = (): LifecycleTimings => ({
   contractMs: 0,
   worktreeMs: 0,
@@ -117,7 +121,7 @@ export function telemetry(
       (total, item) => total + (typeof item?.deletions === "number" ? item.deletions : 0),
       0,
     ),
-    failedCommands: tools.filter((part) => part.tool === "shell" && part.state.metadata?.exit !== 0).length,
+    failedCommands: tools.filter((part) => isShellTool(part.tool) && part.state.metadata?.exit !== 0).length,
     retries: messages.flatMap((message) => message.parts).filter((part) => part.type === "retry").length,
     selectedSkills: tools
       .filter((part) => part.tool === "skill")
@@ -151,7 +155,7 @@ export function proof(
           : "UNRELATED"
         : item.classification) as Exclude<Classification, "UNKNOWN">,
     }))
-  const successfulShell = tools.filter((part) => part.tool === "shell" && part.state.metadata?.exit === 0)
+  const successfulShell = tools.filter((part) => isShellTool(part.tool) && part.state.metadata?.exit === 0)
   const command = successfulShell.map((part) => String(part.state.input.command ?? "")).join("\n")
   const facts = new Set<string>()
   if (
@@ -230,7 +234,7 @@ export function rollbackCandidates(messages: MessageV2.WithParts[], result: Proo
     const laterMutation = tools.some(
       (part) =>
         part !== writes[0] &&
-        ["edit", "write", "apply_patch", "shell"].includes(part.tool) &&
+        ["edit", "write", "apply_patch", "bash", "shell"].includes(part.tool) &&
         JSON.stringify(part.state.input).includes(item.file),
     )
     if (laterMutation) return []

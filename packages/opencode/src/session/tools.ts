@@ -127,7 +127,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
               { tool: item.id, sessionID: ctx.sessionID, callID: ctx.callID, args },
               output,
             )
-            if (input.execution && ["skill", "scope_check", "shell", "edit", "write", "patch"].includes(item.id))
+            if (input.execution && ["skill", "scope_check", "bash", "shell", "edit", "write", "patch"].includes(item.id))
               yield* HarnessRecord.write({
                 session: input.sessionService,
                 sessionID: input.session.id,

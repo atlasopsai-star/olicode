@@ -190,7 +190,9 @@ function metrics(...outputs: string[]) {
         .filter((item): item is string => typeof item === "string"),
     ).size,
     failedCommands: completed.filter(
-      (item) => item.tool === "shell" && (item.state as Record<string, Record<string, unknown>>).metadata?.exit !== 0,
+      (item) =>
+        ["bash", "shell"].includes(String(item.tool)) &&
+        (item.state as Record<string, Record<string, unknown>>).metadata?.exit !== 0,
     ).length,
     retries: number(persistedTelemetry?.retries),
     proofCorrections:
@@ -308,7 +310,12 @@ for (const task of tasks) {
           trial,
           model,
           success:
-            run.exitCode === 0 && verification.exitCode === 0 && acceptance.exitCode === 0 && requiredEvidencePassed,
+            run.exitCode === 0 &&
+            verification.exitCode === 0 &&
+            acceptance.exitCode === 0 &&
+            requiredEvidencePassed &&
+            observed.scopeViolations === 0 &&
+            observed.unsupportedCompletionClaims === 0,
           timedOut: run.timedOut,
           wallMilliseconds: Math.round(run.milliseconds),
           ...observed,
