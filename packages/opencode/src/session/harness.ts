@@ -314,6 +314,8 @@ export function render(input: { agent: Agent.Info; query: string; taskID?: strin
       ? "Use an explicitly named path without rediscovering it. Inspect once, make the surgical edit, then use one cheapest sufficient check (a direct reread is enough for a literal edit) and stop."
       : active.rigor === "STANDARD" && active.action === "change"
         ? "Read explicitly named source paths directly. If a requested companion test is unnamed, use one targeted search to locate it; do not scan configs or unrelated source files unless the first targeted validation fails. Changed-file scope is enforced automatically; do not spend a tool call rechecking it."
+        : active.rigor === "DEBUG" && (active.budgets.expectedFiles ?? Infinity) <= 2
+          ? "For this small bug, read the named implementation directly and use at most one targeted search for its companion test. Fix the root cause, run one focused regression command, and stop without todos, status checks, or diff narration."
       : "Run the cheapest sufficient validation. Changed-file scope is enforced automatically at completion; do not spend a tool call rechecking it.",
     input.agent.name === "plan" ? "Plan precisely. Do not implement code in this mode." : undefined,
     "Final response style: tight. State outcome, changed files, verification, and unresolved issues only.",

@@ -138,6 +138,18 @@ describe("tool.registry", () => {
     expect(visibleForExecution("read", execution)).toBe(true)
   })
 
+  test("keeps ceremony and external research out of small debug tasks", () => {
+    const execution = SessionHarness.execution({
+      query: "Fix the adult boundary bug in src/account.ts and add a regression test",
+    })
+
+    expect(execution.rigor).toBe("DEBUG")
+    expect(execution.contract.budgets.expectedFiles).toBe(2)
+    for (const tool of ["task", "webfetch", "websearch", "todowrite", "skill"])
+      expect(visibleForExecution(tool, execution)).toBe(false)
+    expect(visibleForExecution("bash", execution)).toBe(true)
+  })
+
   test("exposes ship only for shipping contracts", () => {
     expect(visibleForExecution("ship", SessionHarness.execution({ query: "Fix src/app.ts" }))).toBe(false)
     expect(visibleForExecution("ship", SessionHarness.execution({ query: "Push this branch and open a PR" }))).toBe(true)

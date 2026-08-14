@@ -93,6 +93,16 @@ describe("session.harness", () => {
     expect(output).toContain("do not spend a tool call rechecking it")
   })
 
+  test("small debug tasks receive a focused root-cause workflow", () => {
+    const output = SessionHarness.render({
+      agent: build,
+      query: "Fix the adult boundary bug in src/account.ts and add a regression test",
+    })
+
+    expect(output).toContain("run one focused regression command")
+    expect(output).toContain("without todos")
+  })
+
   test("contract protects lockfiles and budgets dependencies", () => {
     const contract = SessionHarness.contract("Change src/button.ts label")
     expect(contract.action).toBe("change")

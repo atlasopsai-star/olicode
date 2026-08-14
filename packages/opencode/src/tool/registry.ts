@@ -84,6 +84,12 @@ export function visibleForExecution(toolID: string, execution?: Execution) {
     ["task", "webfetch", "websearch", "skill"].includes(toolID)
   )
     return false
+  if (
+    execution.rigor === "DEBUG" &&
+    (execution.contract.budgets.expectedFiles ?? Infinity) <= 2 &&
+    ["task", "webfetch", "websearch", "todowrite", "skill"].includes(toolID)
+  )
+    return false
   if (toolID === "todowrite" && execution.mode === "change" && execution.rigor === "STANDARD") return false
   if (toolID === "browser") return ["browser", "design"].includes(execution.mode)
   if (toolID === "ship") return execution.mode === "ship"
