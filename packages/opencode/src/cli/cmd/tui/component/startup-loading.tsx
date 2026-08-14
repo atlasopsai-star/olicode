@@ -64,7 +64,7 @@ export function StartupLoading(props: { ready: () => boolean }) {
           flexDirection="row"
           gap={2}
         >
-          <OliCodeWordmark compact />
+          <OliCodeWordmark variant="micro" />
           <text fg={theme.border}>│</text>
           <Spinner color={theme.primary}>{text()}</Spinner>
         </box>

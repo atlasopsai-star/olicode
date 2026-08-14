@@ -4,7 +4,7 @@ import { useTheme } from "../../context/theme"
 import { useProject } from "@tui/context/project"
 import { useSync } from "@tui/context/sync"
 import { useGamification } from "../../context/gamification"
-import { OliCodeSectionTitle, OliCodeWordmark } from "../../component/olicode-brand"
+import { OliCodeSectionTitle } from "../../component/olicode-brand"
 import { useCommandShortcut } from "../../keymap"
 
 function getGitBranch(): string {
@@ -233,8 +233,6 @@ export function LeftSidebar(props: { sessionID: string }) {
     >
       <scrollbox flexGrow={1}>
         <box flexShrink={0} gap={1} paddingRight={1}>
-          <OliCodeWordmark />
-          <Divider />
           <CommandCenter />
           <Divider />
           <ProjectOverview sessionID={props.sessionID} />

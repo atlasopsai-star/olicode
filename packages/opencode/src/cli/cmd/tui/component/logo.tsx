@@ -2,12 +2,9 @@ import { BoxRenderable, MouseButton, MouseEvent, RGBA, TextAttributes } from "@o
 import { useRenderer } from "@opentui/solid"
 import { For, createMemo, createSignal, onCleanup, onMount, type JSX } from "solid-js"
 import { useTheme, tint } from "@tui/context/theme"
-import { go, logo } from "@/cli/logo"
+import { go, logo, type LogoShape } from "@/cli/logo"
 
-export type LogoShape = {
-  left: string[]
-  right: string[]
-}
+export type { LogoShape } from "@/cli/logo"
 
 type ShimmerConfig = {
   period: number

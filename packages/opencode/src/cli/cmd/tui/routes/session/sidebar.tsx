@@ -92,9 +92,9 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
 
         <box flexShrink={0} gap={1} paddingTop={1}>
           <TuiPluginRuntime.Slot name="sidebar_footer" mode="single_winner" session_id={props.sessionID}>
-            <box flexDirection="row" gap={1}>
-              <OliCodeWordmark compact muted />
-              <text fg={theme.textMuted}>{InstallationVersion}</text>
+            <box gap={0}>
+              <OliCodeWordmark variant="micro" muted />
+              <text fg={theme.textMuted}>v{InstallationVersion}</text>
             </box>
           </TuiPluginRuntime.Slot>
         </box>

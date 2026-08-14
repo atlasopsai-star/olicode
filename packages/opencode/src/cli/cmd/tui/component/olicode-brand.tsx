@@ -1,16 +1,87 @@
-import { Show } from "solid-js"
-import { useTheme } from "../context/theme"
+import { For } from "solid-js"
+import { logo, type LogoShape } from "@/cli/logo"
+import { Logo } from "./logo"
+import { tint, useTheme } from "../context/theme"
 
-export function OliCodeWordmark(props: { muted?: boolean; compact?: boolean } = {}) {
+export type OliCodeWordmarkVariant = "hero" | "header" | "compact" | "micro"
+
+const pixels = (shape: string[]) =>
+  shape.flatMap((line) => [
+    Array.from(line).map((char) => (char === "█" || char === "▀" || char === "^" ? 1 : 0)),
+    Array.from(line).map((char) => (char === "█" || char === "▄" ? 1 : 0)),
+  ])
+
+const collapse = (rows: number[][]) =>
+  Array.from({ length: Math.ceil(rows.length / 2) }, (_, y) =>
+    rows[y * 2].map((cell, x) => (cell || rows[y * 2 + 1]?.[x] ? 1 : 0)),
+  )
+
+const braille = (rows: number[][]) =>
+  Array.from({ length: Math.ceil(rows.length / 4) }, (_, y) => {
+    const line = Array.from({ length: Math.ceil(rows[0].length / 2) }, (_, x) => {
+      const points = [
+        [0, 0, 1],
+        [0, 1, 2],
+        [0, 2, 4],
+        [1, 0, 8],
+        [1, 1, 16],
+        [1, 2, 32],
+        [0, 3, 64],
+        [1, 3, 128],
+      ] as const
+      const value = points.reduce(
+        (sum, [dx, dy, bit]) => sum + (rows[y * 4 + dy]?.[x * 2 + dx] ? bit : 0),
+        0,
+      )
+      return value ? String.fromCodePoint(0x2800 + value) : " "
+    }).join("")
+    return line.trimEnd()
+  })
+
+const derived = {
+  header: {
+    left: braille(pixels(logo.left)),
+    right: braille(pixels(logo.right)),
+  },
+  compact: {
+    left: braille(collapse(pixels(logo.left))),
+    right: braille(collapse(pixels(logo.right))),
+  },
+} satisfies Record<"header" | "compact", LogoShape>
+
+export function OliCodeWordmark(
+  props: { variant?: OliCodeWordmarkVariant; muted?: boolean; animated?: boolean } = {},
+) {
   const { theme } = useTheme()
+  const variant = () => props.variant ?? "compact"
+  if (variant() === "hero") return <Logo idle={props.animated !== false} />
+
+  const shape = () => (variant() === "header" ? derived.header : derived.compact)
+  const left = () => tint(theme.background, theme.primary, props.muted ? 0.38 : 0.58)
+  const gold = () => tint(theme.background, theme.primary, props.muted ? 0.52 : 0.92)
+  const champagne = () => tint(theme.background, theme.secondary, props.muted ? 0.48 : 0.88)
+
   return (
-    <text fg={props.muted ? theme.textMuted : theme.text} wrapMode="none">
-      <span style={{ fg: theme.primary, bold: true }}>OLI</span>
-      <span style={{ bold: true }}>CODE</span>
-      <Show when={!props.compact}>
-        <span style={{ fg: theme.borderActive }}> / WORKSPACE</span>
-      </Show>
-    </text>
+    <box gap={0}>
+      <For each={shape().left}>
+        {(line, index) => (
+          <box flexDirection="row" gap={1}>
+            <text fg={left()} wrapMode="none" selectable={false}>
+              <b>{line}</b>
+            </text>
+            <text wrapMode="none" selectable={false}>
+              <For each={Array.from(shape().right[index()] ?? "")}>
+                {(char, charIndex) => (
+                  <span style={{ fg: charIndex() >= Math.floor(shape().right[index()].length * 0.62) ? champagne() : gold(), bold: true }}>
+                    {char}
+                  </span>
+                )}
+              </For>
+            </text>
+          </box>
+        )}
+      </For>
+    </box>
   )
 }
 

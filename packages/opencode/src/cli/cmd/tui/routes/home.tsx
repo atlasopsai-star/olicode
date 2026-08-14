@@ -1,6 +1,5 @@
 import { Prompt, type PromptRef } from "@tui/component/prompt"
 import { createEffect, createMemo, createSignal, onCleanup, onMount, Show } from "solid-js"
-import { Logo } from "../component/logo"
 import { useTheme } from "../context/theme"
 import { useSync } from "../context/sync"
 import { Toast } from "../ui/toast"
@@ -12,7 +11,7 @@ import { TuiPluginRuntime } from "@/cli/cmd/tui/plugin/runtime"
 import { useEditorContext } from "@tui/context/editor"
 import { useTerminalDimensions } from "@opentui/solid"
 import { useTuiConfig } from "../context/tui-config"
-import { OliCodeStatus } from "../component/olicode-brand"
+import { OliCodeStatus, OliCodeWordmark } from "../component/olicode-brand"
 
 let once = false
 const placeholder = {
@@ -128,7 +127,7 @@ export function Home() {
         {/* Logo + hero block */}
         <box flexShrink={0} alignItems="center">
           <TuiPluginRuntime.Slot name="home_logo" mode="replace">
-            <Logo idle />
+            <OliCodeWordmark variant="hero" />
           </TuiPluginRuntime.Slot>
           <box alignItems="center" paddingTop={1}>
             <text fg={theme.primary}>

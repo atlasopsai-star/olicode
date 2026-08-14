@@ -20,7 +20,7 @@ export function DialogHelp() {
     <box paddingLeft={2} paddingRight={2} gap={1}>
       <box flexDirection="row" justifyContent="space-between">
         <box flexDirection="row" gap={2}>
-          <OliCodeWordmark compact />
+          <OliCodeWordmark variant="compact" />
           <OliCodeSectionTitle>HELP</OliCodeSectionTitle>
         </box>
         <text fg={theme.textMuted} onMouseUp={() => dialog.clear()}>

@@ -2,6 +2,7 @@ import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
 import type { InternalTuiPlugin } from "../../plugin/internal"
 import { createMemo, Show } from "solid-js"
 import { Global } from "@opencode-ai/core/global"
+import { OliCodeWordmark } from "../../component/olicode-brand"
 
 const id = "internal:sidebar-footer"
 
@@ -64,13 +65,10 @@ function View(props: { api: TuiPluginApi }) {
         <span style={{ fg: theme().textMuted }}>{path().parent}/</span>
         <span style={{ fg: theme().text }}>{path().name}</span>
       </text>
-      <text fg={theme().textMuted}>
-        <span style={{ fg: theme().success }}>•</span> <b>Oli</b>
-        <span style={{ fg: theme().text }}>
-          <b>Code</b>
-        </span>{" "}
-        <span>{props.api.app.version}</span>
-      </text>
+      <box gap={0}>
+        <OliCodeWordmark variant="micro" muted />
+        <text fg={theme().borderActive}>v{props.api.app.version}</text>
+      </box>
     </box>
   )
 }

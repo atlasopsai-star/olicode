@@ -3,6 +3,7 @@ import type { InternalTuiPlugin } from "../../plugin/internal"
 import { createMemo, Match, Show, Switch } from "solid-js"
 import { Global } from "@opencode-ai/core/global"
 import { OliCodeWordmark } from "../../component/olicode-brand"
+import { useTerminalDimensions } from "@opentui/solid"
 
 const id = "internal:home-footer"
 
@@ -70,7 +71,7 @@ function Version(props: { api: TuiPluginApi }) {
 
   return (
     <box flexShrink={0} flexDirection="row" gap={1} alignItems="center">
-      <OliCodeWordmark compact muted />
+      <OliCodeWordmark variant="micro" muted />
       <text fg={theme().borderActive}>v{props.api.app.version}</text>
     </box>
   )
@@ -78,6 +79,7 @@ function Version(props: { api: TuiPluginApi }) {
 
 function View(props: { api: TuiPluginApi }) {
   const theme = () => props.api.theme.current
+  const dimensions = useTerminalDimensions()
   return (
     <box
       width="100%"
@@ -90,11 +92,15 @@ function View(props: { api: TuiPluginApi }) {
       gap={2}
       alignItems="center"
     >
-      <Directory api={props.api} />
-      <Mcp api={props.api} />
+      <Show when={dimensions().width >= 100}>
+        <Directory api={props.api} />
+        <Mcp api={props.api} />
+      </Show>
       <box flexGrow={1} />
-      <Shortcuts api={props.api} />
-      <text fg={theme().border}>│</text>
+      <Show when={dimensions().width >= 120}>
+        <Shortcuts api={props.api} />
+        <text fg={theme().border}>│</text>
+      </Show>
       <Version api={props.api} />
     </box>
   )
