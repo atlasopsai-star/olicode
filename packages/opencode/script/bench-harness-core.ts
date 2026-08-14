@@ -111,7 +111,7 @@ function metrics(...outputs: string[]) {
   const events = outputs.flatMap(parseEvents)
   const tools = new Map<string, Record<string, unknown>>()
   const steps = new Map<string, Record<string, unknown>>()
-  const harness: Array<Record<string, unknown>> = []
+  const harness = new Map<string, Record<string, unknown>>()
   const seen = new Set<object>()
   const visit = (value: unknown) => {
     if (!value || typeof value !== "object" || seen.has(value)) return
@@ -123,22 +123,26 @@ function metrics(...outputs: string[]) {
     const item = value as Record<string, unknown>
     if (item.type === "tool" && typeof item.callID === "string") tools.set(item.callID, item)
     if (item.type === "step-finish" && typeof item.id === "string") steps.set(item.id, item)
-    if (item.type === "harness") harness.push(item)
+    if (item.type === "harness" && typeof item.id === "string") harness.set(item.id, item)
     Object.values(item).forEach(visit)
   }
   events.forEach(visit)
+  const harnessRecords = [...harness.values()]
   const completed = [...tools.values()].filter(
     (item) =>
       item.state && typeof item.state === "object" && (item.state as Record<string, unknown>).status === "completed",
   )
   const tokens = [...steps.values()].map((item) => item.tokens as Record<string, unknown>)
   const number = (value: unknown) => (typeof value === "number" ? value : 0)
-  const persistedTelemetry = harness.findLast((item) => item.kind === "telemetry")?.data as
+  const persistedTelemetry = harnessRecords.findLast((item) => item.kind === "telemetry")?.data as
     | Record<string, unknown>
     | undefined
   const lifecycle = persistedTelemetry?.timings as Record<string, unknown> | undefined
   const context = persistedTelemetry?.context as Record<string, unknown> | undefined
   return {
+    sessionID: events
+      .map((event) => (event && typeof event === "object" ? (event as Record<string, unknown>).sessionID : undefined))
+      .find((item): item is string => typeof item === "string"),
     inputTokens: tokens.reduce((total, item) => total + number(item.input), 0),
     outputTokens: tokens.reduce((total, item) => total + number(item.output), 0),
     reasoningTokens: tokens.reduce((total, item) => total + number(item.reasoning), 0),
@@ -187,13 +191,13 @@ function metrics(...outputs: string[]) {
     ).length,
     retries: number(persistedTelemetry?.retries),
     proofCorrections:
-      harness.filter((item) => item.kind === "proof").length > 1
-        ? harness.filter((item) => item.kind === "proof").length - 1
+      harnessRecords.filter((item) => item.kind === "proof").length > 1
+        ? harnessRecords.filter((item) => item.kind === "proof").length - 1
         : 0,
-    scopeViolations: harness.filter(
+    scopeViolations: harnessRecords.filter(
       (item) => item.kind === "completion" && JSON.stringify(item.data).includes("UNRELATED"),
     ).length,
-    unsupportedCompletionClaims: harness.filter(
+    unsupportedCompletionClaims: harnessRecords.filter(
       (item) => item.kind === "completion" && (item.data as Record<string, unknown>)?.decision === "BLOCK",
     ).length,
     harnessLifecycleMs: lifecycle
