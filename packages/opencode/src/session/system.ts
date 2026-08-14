@@ -32,7 +32,7 @@ export function provider(model: Provider.Model) {
 
 export interface Interface {
   readonly environment: (model: Provider.Model) => Effect.Effect<string[]>
-  readonly harness: (input: { agent: Agent.Info; query: string }) => Effect.Effect<string>
+  readonly harness: (input: { agent: Agent.Info; query: string; taskID?: string }) => Effect.Effect<string>
   readonly skills: (input: { agent: Agent.Info; query?: string }) => Effect.Effect<string | undefined>
 }
 
@@ -74,7 +74,11 @@ export const layer = Layer.effect(
         ]
       }),
 
-      harness: Effect.fn("SystemPrompt.harness")(function* (input: { agent: Agent.Info; query: string }) {
+      harness: Effect.fn("SystemPrompt.harness")(function* (input: {
+        agent: Agent.Info
+        query: string
+        taskID?: string
+      }) {
         return SessionHarness.render(input)
       }),
 

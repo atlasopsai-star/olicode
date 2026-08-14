@@ -78,10 +78,15 @@ export function telemetry(messages: MessageV2.WithParts[]): Telemetry {
   }
 }
 
-export function proof(messages: MessageV2.WithParts[], contract: OliTaskContract, rolledBack: string[] = []): Proof {
+export function proof(
+  messages: MessageV2.WithParts[],
+  contract: OliTaskContract,
+  rolledBack: string[] = [],
+  workspaceFiles: string[] = [],
+): Proof {
   const tools = completedTools(messages)
   const report = ScopeGuard.scan(messages)
-  const scope = ScopeGuard.postDiff(messages, contract)
+  const scope = ScopeGuard.postDiff(messages, contract, workspaceFiles)
     .filter((item) => !rolledBack.includes(item.file))
     .map((item) => ({
       ...item,
@@ -94,7 +99,11 @@ export function proof(messages: MessageV2.WithParts[], contract: OliTaskContract
   const successfulShell = tools.filter((part) => part.tool === "shell" && part.state.metadata?.exit === 0)
   const command = successfulShell.map((part) => String(part.state.input.command ?? "")).join("\n")
   const facts = new Set<string>()
-  if (report.edited.some((file) => !rolledBack.includes(file))) facts.add("change")
+  if (
+    report.edited.some((file) => !rolledBack.includes(file)) ||
+    scope.some((item) => item.classification !== "UNRELATED")
+  )
+    facts.add("change")
   if (successfulShell.length > 0) facts.add("validation")
   if (
     contract.rigor === "FAST" &&
@@ -134,12 +143,16 @@ export function proof(messages: MessageV2.WithParts[], contract: OliTaskContract
   if (shipping.some((part) => part.state.input.action === "deploy")) facts.add("deploy")
   const required = contract.requiredEvidence.map((item) => item.id)
   const missing = required.filter((item) => !facts.has(item))
+  const metrics = telemetry(messages)
   return {
     satisfied: required.filter((item) => facts.has(item)),
     missing,
     scope,
     stop: missing.length === 0 && !scope.some((item) => item.classification === "UNRELATED"),
-    telemetry: telemetry(messages),
+    telemetry: {
+      ...metrics,
+      filesChanged: new Set([...report.edited, ...workspaceFiles].filter((file) => !rolledBack.includes(file))).size,
+    },
   }
 }
 

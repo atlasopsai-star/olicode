@@ -4,6 +4,9 @@ import type { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { ProviderID, ModelID } from "../../src/provider/schema"
 import { SessionHarness } from "../../src/session/harness"
+import { mkdtempSync, rmSync } from "node:fs"
+import os from "node:os"
+import path from "node:path"
 
 let seq = 0
 
@@ -106,5 +109,39 @@ describe("ScopeGuard.scan", () => {
       contract: SessionHarness.contract("Audit src/button.ts"),
     })
     expect(decision.classification).toBe("UNRELATED")
+  })
+
+  test("worktree snapshots isolate task changes from pre-existing user work", async () => {
+    const directory = mkdtempSync(path.join(os.tmpdir(), "olicode-scope-"))
+    try {
+      await Bun.write(path.join(directory, "owned.ts"), "export const owned = 1\n")
+      await Bun.write(path.join(directory, "user.ts"), "export const user = 1\n")
+      for (const args of [
+        ["git", "init", "-q"],
+        ["git", "add", "."],
+        ["git", "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "fixture"],
+      ])
+        expect((await Bun.spawn(args, { cwd: directory }).exited)).toBe(0)
+
+      await Bun.write(path.join(directory, "user.ts"), "export const user = 2\n")
+      const start = await ScopeGuard.snapshot(directory)
+      await Bun.write(path.join(directory, "owned.ts"), "export const owned = 2\n")
+      const unchangedUser = await ScopeGuard.snapshot(directory)
+
+      expect(ScopeGuard.changedSince(start, unchangedUser)).toEqual([path.join(directory, "owned.ts")])
+
+      await Bun.write(path.join(directory, "user.ts"), "export const user = 3\n")
+      expect(ScopeGuard.changedSince(start, await ScopeGuard.snapshot(directory))).toEqual([
+        path.join(directory, "owned.ts"),
+        path.join(directory, "user.ts"),
+      ])
+
+      await Bun.file(path.join(directory, "user.ts")).delete()
+      expect(ScopeGuard.changedSince(start, await ScopeGuard.snapshot(directory))).toContain(
+        path.join(directory, "user.ts"),
+      )
+    } finally {
+      rmSync(directory, { recursive: true, force: true })
+    }
   })
 })

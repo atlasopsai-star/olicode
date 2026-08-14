@@ -64,6 +64,7 @@ import { LLMEvent } from "@opencode-ai/llm"
 import { SessionHarness } from "./harness"
 import { HarnessCore } from "./harness-core"
 import { HarnessRecord } from "./harness-record"
+import { ScopeGuard } from "./scope-guard"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -1306,6 +1307,7 @@ export const layer = Layer.effect(
           if (!lastUser) throw new Error("No user message found in stream. This should never happen.")
 
           const execution = SessionHarness.execution({
+            taskID: lastUser.id,
             query: (msgs.findLast((msg) => msg.info.id === lastUser.id)?.parts ?? [])
               .filter((part): part is MessageV2.TextPart => part.type === "text" && !part.synthetic)
               .map((part) => part.text)
@@ -1320,13 +1322,14 @@ export const layer = Layer.effect(
               ),
             )
           ) {
+            const worktree = yield* Effect.promise(() => ScopeGuard.snapshot(ctx.worktree))
             yield* HarnessRecord.write({
               session: sessions,
               sessionID,
               messageID: lastUser.id,
               taskID: execution.contract.id,
               kind: "contract",
-              data: execution.contract,
+              data: { ...execution.contract, worktree },
             })
             yield* HarnessRecord.write({
               session: sessions,
@@ -1541,7 +1544,7 @@ export const layer = Layer.effect(
               : ""
 
             const [harness, skills, env, instructions, modelMsgs] = yield* Effect.all([
-              sys.harness({ agent, query }),
+              sys.harness({ agent, query, taskID: lastUser.id }),
               sys.skills({ agent, query }),
               sys.environment(model),
               instruction.system().pipe(Effect.orDie),
@@ -1586,7 +1589,23 @@ export const layer = Layer.effect(
 
               if (SessionHarness.enabled() && execution.contract.requiredEvidence.length > 0) {
                 const current = yield* MessageV2.filterCompactedEffect(sessionID)
-                let proof = HarnessCore.proof(current, execution.contract)
+                const initial = current
+                  .flatMap((message) => message.parts)
+                  .find(
+                    (part) =>
+                      part.type === "harness" &&
+                      part.kind === "contract" &&
+                      part.taskID === execution.contract.id &&
+                      ScopeGuard.isWorktreeSnapshot(part.data.worktree),
+                  )
+                const workspaceFiles =
+                  initial?.type === "harness" && ScopeGuard.isWorktreeSnapshot(initial.data.worktree)
+                    ? ScopeGuard.changedSince(
+                        initial.data.worktree,
+                        yield* Effect.promise(() => ScopeGuard.snapshot(ctx.worktree)),
+                      )
+                    : []
+                let proof = HarnessCore.proof(current, execution.contract, [], workspaceFiles)
                 const rolledBack: string[] = []
                 for (const candidate of HarnessCore.rollbackCandidates(current, proof)) {
                   const content = yield* fsys
@@ -1608,7 +1627,8 @@ export const layer = Layer.effect(
                     },
                   })
                 }
-                if (rolledBack.length) proof = HarnessCore.proof(current, execution.contract, rolledBack)
+                if (rolledBack.length)
+                  proof = HarnessCore.proof(current, execution.contract, rolledBack, workspaceFiles)
                 yield* HarnessRecord.write({
                   session: sessions,
                   sessionID,

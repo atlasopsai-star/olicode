@@ -57,6 +57,35 @@ describe("harness core", () => {
     expect(result.missing).toEqual(["change", "validation"])
   })
 
+  test("proof gate blocks an unrelated file found only in the real workspace diff", () => {
+    const result = HarnessCore.proof(
+      [tool("shell", { command: "bun test" }, { exit: 0 })],
+      SessionHarness.contract("Change src/button.ts label"),
+      [],
+      ["/repo/unrelated.ts"],
+    )
+
+    expect(result.stop).toBe(false)
+    expect(result.scope).toContainEqual({
+      file: "/repo/unrelated.ts",
+      classification: "UNRELATED",
+      reason: "The path is outside the explicit task scope.",
+    })
+  })
+
+  test("real workspace evidence supports an explicitly scoped shell mutation", () => {
+    const result = HarnessCore.proof(
+      [tool("shell", { command: "sed -i s/Save/Continue/ src/button.ts && bun test" }, { exit: 0 })],
+      SessionHarness.contract("Change src/button.ts label"),
+      [],
+      ["/repo/src/button.ts"],
+    )
+
+    expect(result.stop).toBe(true)
+    expect(result.satisfied).toEqual(["change", "validation", "scope"])
+    expect(result.telemetry.filesChanged).toBe(1)
+  })
+
   test("FAST accepts a post-mutation reread as targeted validation", () => {
     const filePath = "/repo/src/button.ts"
     const contract = SessionHarness.contract("Change the label in src/button.ts")

@@ -244,12 +244,12 @@ function scopes(query: string) {
   return explicit.length ? [...new Set(explicit)] : ["."]
 }
 
-export function contract(query: string): OliTaskContract {
+export function contract(query: string, id = stableID(query)): OliTaskContract {
   const selected = action(query)
   const level = rigor(query, selected)
   const files = expectedFiles(query, selected)
   return {
-    id: stableID(query),
+    id,
     objective: objective(query),
     action: selected,
     acceptanceCriteria: acceptanceCriteria(query, selected),
@@ -277,8 +277,8 @@ export function browserMetadata(query: string) {
   }
 }
 
-export function execution(input: { query: string }): Execution {
-  const active = contract(input.query)
+export function execution(input: { query: string; taskID?: string }): Execution {
+  const active = contract(input.query, input.taskID)
   return {
     mode: active.action,
     rigor: active.rigor,
@@ -288,9 +288,9 @@ export function execution(input: { query: string }): Execution {
   }
 }
 
-export function render(input: { agent: Agent.Info; query: string }) {
+export function render(input: { agent: Agent.Info; query: string; taskID?: string }) {
   if (!enabled()) return ""
-  const active = contract(input.query)
+  const active = contract(input.query, input.taskID)
   return [
     "<olicode_harness>",
     `Task: ${active.id}`,

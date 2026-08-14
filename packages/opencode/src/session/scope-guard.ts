@@ -17,6 +17,7 @@ function filesFromApplyPatchMetadata(metadata: unknown) {
 export type Classification = "REQUESTED" | "NECESSARY" | "VERIFICATION" | "UNRELATED" | "UNKNOWN"
 export type Report = { seen: string[]; edited: string[]; unexamined: string[] }
 export type MutationDecision = { classification: Classification; reason: string }
+export type WorktreeSnapshot = { available: boolean; files: Record<string, string> }
 
 function normalized(filePath: string) {
   return filePath.replaceAll("\\", "/").replace(/^\.\//, "")
@@ -89,8 +90,55 @@ export function scan(messages: MessageV2.WithParts[]): Report {
   return { seen: [...seen].sort(), edited: [...edited].sort(), unexamined: unexamined.sort() }
 }
 
-export function postDiff(messages: MessageV2.WithParts[], contract: OliTaskContract) {
-  return scan(messages).edited.map((file) => ({ file, ...classifyFile(file, contract) }))
+export function postDiff(messages: MessageV2.WithParts[], contract: OliTaskContract, workspaceFiles: string[] = []) {
+  return [...new Set([...scan(messages).edited, ...workspaceFiles])].map((file) => ({
+    file,
+    ...classifyFile(file, contract),
+  }))
+}
+
+export async function snapshot(root: string): Promise<WorktreeSnapshot> {
+  const child = Bun.spawn(["git", "status", "--porcelain=v1", "-z", "--untracked-files=all"], {
+    cwd: root,
+    stdout: "pipe",
+    stderr: "ignore",
+  })
+  const [output, exit] = await Promise.all([new Response(child.stdout).text(), child.exited])
+  if (exit !== 0) return { available: false, files: {} }
+
+  const entries = output.split("\0")
+  const files: Record<string, string> = {}
+  for (let index = 0; index < entries.length; index++) {
+    const entry = entries[index]
+    if (!entry) continue
+    const status = entry.slice(0, 2)
+    const name = entry.slice(3)
+    if (!name) continue
+    const file = path.resolve(root, name)
+    files[file] = await fingerprint(file)
+    if (status.includes("R") || status.includes("C")) index++
+  }
+  return { available: true, files }
+}
+
+export function changedSince(start: WorktreeSnapshot, end: WorktreeSnapshot) {
+  if (!start.available || !end.available) return []
+  return [...new Set([...Object.keys(start.files), ...Object.keys(end.files)])]
+    .filter((file) => start.files[file] !== end.files[file])
+    .sort()
+}
+
+export function isWorktreeSnapshot(value: unknown): value is WorktreeSnapshot {
+  if (!value || typeof value !== "object") return false
+  const item = value as Record<string, unknown>
+  return typeof item.available === "boolean" && !!item.files && typeof item.files === "object"
+}
+
+async function fingerprint(filePath: string) {
+  const file = Bun.file(filePath)
+  if (!(await file.exists())) return "missing"
+  const bytes = await file.arrayBuffer()
+  return `${bytes.byteLength}:${Bun.hash(bytes)}`
 }
 
 export * as ScopeGuard from "./scope-guard"

@@ -50,6 +50,12 @@ describe("session.harness", () => {
     })
   })
 
+  test("binds repeated request text to the active user message", () => {
+    const query = "Change src/header.ts button label"
+    expect(SessionHarness.execution({ query, taskID: "message-1" }).contract.id).toBe("message-1")
+    expect(SessionHarness.execution({ query, taskID: "message-2" }).contract.id).toBe("message-2")
+  })
+
   test("rigor picks fast for small, well-scoped edits", () => {
     expect(SessionHarness.rigor("Change src/header.ts button label")).toBe("FAST")
     expect(SessionHarness.rigor("Rename src/user.ts variable")).toBe("FAST")
