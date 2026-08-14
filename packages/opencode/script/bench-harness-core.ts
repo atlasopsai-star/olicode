@@ -9,6 +9,8 @@ const runs = Number(process.env.OLI_BENCH_RUNS ?? 3)
 if (!Number.isInteger(runs) || runs < 1) throw new Error("OLI_BENCH_RUNS must be a positive integer.")
 const taskFilter = process.env.OLI_BENCH_TASK
 const variantFilter = process.env.OLI_BENCH_VARIANT
+const stockBinary = process.env.OLI_BENCH_STOCK_BINARY
+if (stockBinary && !existsSync(stockBinary)) throw new Error(`OLI_BENCH_STOCK_BINARY does not exist: ${stockBinary}`)
 const runTimeout = Number(process.env.OLI_BENCH_TIMEOUT_MS ?? 120_000)
 const output = process.env.OLI_BENCH_OUTPUT ?? path.join(os.tmpdir(), "olibench-core.json")
 
@@ -247,10 +249,9 @@ for (const task of tasks) {
         )
         const run = await command(
           [
-            "bun",
-            "run",
-            "--conditions=browser",
-            "src/index.ts",
+            ...(variant === "stock" && stockBinary
+              ? [stockBinary]
+              : ["bun", "run", "--conditions=browser", "src/index.ts"]),
             "run",
             "--format",
             "json",
@@ -267,7 +268,7 @@ for (const task of tasks) {
         const sessionID = parseEvents(run.stdout)
           .map((event) => (event && typeof event === "object" ? (event as Record<string, unknown>).sessionID : undefined))
           .find((item): item is string => typeof item === "string")
-        const exported = sessionID
+        const exported = sessionID && variant === "olicode"
           ? await command(["bun", "run", "src/index.ts", "export", sessionID], path.resolve(import.meta.dir, ".."))
           : undefined
         const verification = await command(["bun", "test"], directory)
@@ -303,7 +304,19 @@ for (const task of tasks) {
           ...visual,
           error: run.exitCode === 0 ? undefined : run.stderr.trim().slice(-1000),
         })
-        await Bun.write(output, JSON.stringify({ model, runs, trials: results }, null, 2))
+        await Bun.write(
+          output,
+          JSON.stringify(
+            {
+              model,
+              runs,
+              control: stockBinary ? { type: "official-binary", binary: stockBinary } : { type: "harness-disabled-fork" },
+              trials: results,
+            },
+            null,
+            2,
+          ),
+        )
       } finally {
         rmSync(directory, { recursive: true, force: true })
       }
@@ -334,7 +347,18 @@ const summary = Object.fromEntries(
   }),
 )
 
-const report = JSON.stringify({ generatedAt: new Date().toISOString(), model, runs, summary, trials: results }, null, 2)
+const report = JSON.stringify(
+  {
+    generatedAt: new Date().toISOString(),
+    model,
+    runs,
+    control: stockBinary ? { type: "official-binary", binary: stockBinary } : { type: "harness-disabled-fork" },
+    summary,
+    trials: results,
+  },
+  null,
+  2,
+)
 await Bun.write(output, report)
 console.error(`OLIBENCH_REPORT=${output}`)
 console.log(report)
