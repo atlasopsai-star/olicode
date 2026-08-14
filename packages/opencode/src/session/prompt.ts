@@ -1310,6 +1310,7 @@ export const layer = Layer.effect(
           systemPromptChars: 0,
           toolSurfaceChars: 0,
           modelMessages: 0,
+          exposedTools: [],
         }
         const session = yield* sessions.get(sessionID).pipe(Effect.orDie)
 
@@ -1586,6 +1587,7 @@ export const layer = Layer.effect(
               typeof value === "function" ? undefined : value,
             ).length
             contextTelemetry.modelMessages += modelMsgs.length
+            contextTelemetry.exposedTools = [...new Set([...contextTelemetry.exposedTools, ...Object.keys(activeTools)])]
             const modelStarted = performance.now()
             const result = yield* handle.process({
               user: lastUser,

@@ -16,6 +16,7 @@ export type ContextTelemetry = {
   systemPromptChars: number
   toolSurfaceChars: number
   modelMessages: number
+  exposedTools: string[]
 }
 
 export type Telemetry = {
@@ -69,6 +70,7 @@ const emptyContext = (): ContextTelemetry => ({
   systemPromptChars: 0,
   toolSurfaceChars: 0,
   modelMessages: 0,
+  exposedTools: [],
 })
 
 export function taskMessages(messages: MessageV2.WithParts[], userID: string) {

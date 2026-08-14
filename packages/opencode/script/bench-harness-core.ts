@@ -207,6 +207,9 @@ function metrics(...outputs: string[]) {
     systemPromptChars: number(context?.systemPromptChars),
     toolSurfaceChars: number(context?.toolSurfaceChars),
     modelMessagesPresented: number(context?.modelMessages),
+    exposedTools: Array.isArray(context?.exposedTools)
+      ? context.exposedTools.filter((item): item is string => typeof item === "string")
+      : [],
   }
 }
 
