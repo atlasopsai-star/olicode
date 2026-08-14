@@ -21,6 +21,7 @@ const tasks = JSON.parse(readFileSync(path.join(fixture, "tasks.json"), "utf8"))
   check: string
   requiredBrowserActions?: string[]
   requiredShipActions?: string[]
+  forbiddenShipActions?: string[]
 }>
 
 async function command(args: string[], cwd: string, env: Record<string, string> = {}, timeout?: number) {
@@ -211,7 +212,8 @@ for (const task of tasks) {
         const observed = metrics(run.stdout)
         const requiredEvidencePassed =
           (task.requiredBrowserActions ?? []).every((action) => observed.browserActions.includes(action)) &&
-          (task.requiredShipActions ?? []).every((action) => observed.shipActions.includes(action))
+          (task.requiredShipActions ?? []).every((action) => observed.shipActions.includes(action)) &&
+          (task.forbiddenShipActions ?? []).every((action) => !observed.shipActions.includes(action))
         results.push({
           task: task.id,
           variant,
