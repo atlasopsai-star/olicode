@@ -49,6 +49,11 @@ describe("session.harness", () => {
   test("rigor picks fast for small, well-scoped edits", () => {
     expect(SessionHarness.rigor("Change src/header.ts button label")).toBe("FAST")
     expect(SessionHarness.rigor("Rename src/user.ts variable")).toBe("FAST")
+    expect(
+      SessionHarness.rigor(
+        "Change the button label in src/ui.ts from Save to Continue. Make only the requested change and verify it.",
+      ),
+    ).toBe("FAST")
   })
 
   test("rigor picks standard for longer or multi-step requests", () => {
@@ -74,6 +79,10 @@ describe("session.harness", () => {
     expect(contract.protectedScope).toContain("bun.lock")
     expect(contract.budgets.maxNewDependencies).toBe(0)
     expect(contract.requiredEvidence.map((item) => item.id)).toEqual(["change", "validation", "scope"])
+  })
+
+  test("budgets a requested focused test separately from the implementation file", () => {
+    expect(SessionHarness.contract("Fix src/account.ts and add a regression test").budgets.expectedFiles).toBe(2)
   })
 
   test("read-only requests do not authorize mutation", () => {

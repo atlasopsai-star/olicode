@@ -96,6 +96,18 @@ export function proof(messages: MessageV2.WithParts[], contract: OliTaskContract
   const facts = new Set<string>()
   if (report.edited.some((file) => !rolledBack.includes(file))) facts.add("change")
   if (successfulShell.length > 0) facts.add("validation")
+  if (
+    contract.rigor === "FAST" &&
+    tools.some(
+      (part, index) =>
+        part.tool === "read" &&
+        report.edited.includes(String(part.state.input.filePath ?? "")) &&
+        tools.slice(0, index).some((candidate) =>
+          ["edit", "write", "apply_patch"].includes(candidate.tool),
+        ),
+    )
+  )
+    facts.add("validation")
   if (/\b(test|vitest|jest|bun test|pytest|cargo test|go test)\b/i.test(command)) facts.add("tests")
   if (/\b(typecheck|tsc|tsgo)\b/i.test(command)) facts.add("typecheck")
   if (/\b(build|cargo build|go build)\b/i.test(command)) facts.add("build")

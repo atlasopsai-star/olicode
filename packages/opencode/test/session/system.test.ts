@@ -43,6 +43,12 @@ const skills: Skill.Info[] = [
     location: "/tmp/browser-automation/SKILL.md",
     content: "# browser-automation",
   },
+  {
+    name: "debug-workflow",
+    description: "Diagnose difficult bugs using reproduction, root-cause analysis, regression testing, and traces.",
+    location: "/tmp/debug-workflow/SKILL.md",
+    content: "# debug-workflow",
+  },
 ]
 
 const build: Agent.Info = {
@@ -107,6 +113,30 @@ describe("session.system", () => {
       // the harness intentionally keeps low-relevance skills out of the
       // prompt to save tokens; the model can still find them via a query.
       expect(output).not.toContain("browser-automation")
+    }),
+  )
+
+  it.effect("does not surface debugging skills for an already-specified local fix", () =>
+    Effect.gen(function* () {
+      const prompt = yield* SystemPrompt.Service
+      const output = yield* prompt.skills({
+        agent: build,
+        query: "Fix the adult boundary in src/account.ts so age 18 counts as adult and add a regression test",
+      })
+
+      expect(output).toBeUndefined()
+    }),
+  )
+
+  it.effect("surfaces debugging skills when root-cause investigation is required", () =>
+    Effect.gen(function* () {
+      const prompt = yield* SystemPrompt.Service
+      const output = yield* prompt.skills({
+        agent: build,
+        query: "Investigate the intermittent checkout failure, reproduce it, and find the root cause",
+      })
+
+      expect(output).toContain("<name>debug-workflow</name>")
     }),
   )
 })

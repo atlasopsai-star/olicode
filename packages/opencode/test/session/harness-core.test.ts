@@ -57,6 +57,32 @@ describe("harness core", () => {
     expect(result.missing).toEqual(["change", "validation"])
   })
 
+  test("FAST accepts a post-mutation reread as targeted validation", () => {
+    const filePath = "/repo/src/button.ts"
+    const contract = SessionHarness.contract("Change the label in src/button.ts")
+    const result = HarnessCore.proof(
+      [
+        tool("read", { filePath }),
+        tool("edit", { filePath }, { filediff: { file: filePath, additions: 1, deletions: 1 } }),
+        tool("read", { filePath }),
+      ],
+      contract,
+    )
+    expect(contract.rigor).toBe("FAST")
+    expect(result.stop).toBe(true)
+    expect(result.missing).toEqual([])
+  })
+
+  test("FAST does not accept a read that happened before mutation", () => {
+    const filePath = "/repo/src/button.ts"
+    const result = HarnessCore.proof(
+      [tool("read", { filePath }), tool("edit", { filePath }, { filediff: { file: filePath } })],
+      SessionHarness.contract("Change the label in src/button.ts"),
+    )
+    expect(result.stop).toBe(false)
+    expect(result.missing).toContain("validation")
+  })
+
   test("telemetry detects repeated exploration", () => {
     const messages = [
       tool("read", { filePath: "/repo/src/button.ts" }),

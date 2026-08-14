@@ -99,6 +99,11 @@ export const layer = Layer.effect(
         }
 
         if (SessionHarness.rigor(input.query) === "FAST") return
+        if (
+          SessionHarness.rigor(input.query) === "DEBUG" &&
+          !/\b(?:diagnos|investigat|reproduc|root cause|unknown|intermittent|flaky|trace)\b/i.test(input.query)
+        )
+          return
 
         const scored = described
           .map((item) => ({ item, metadata: Skill.metadata(item), score: scoreSkill(item, input.query) }))

@@ -110,7 +110,8 @@ export function routeMode(query: string): "build" | "debug" | "design" | "resear
 
 function expectedFiles(query: string, selected: Action) {
   const paths = [...query.matchAll(PATH)].length
-  if (paths > 0) return Math.min(paths, 10)
+  if (paths > 0)
+    return Math.min(paths + (/\b(?:add|write|create) (?:a )?(?:focused |regression )?test\b/i.test(query) ? 1 : 0), 10)
   if (selected === "answer" || selected === "inspect" || selected === "research") return 0
   if (/\b(tiny|typo|label|wording|rename)\b/i.test(query)) return 1
   return selected === "ship" || selected === "design" ? 5 : 3
@@ -126,7 +127,8 @@ export function rigor(query: string, selected = action(query)): RigorLevel {
   if (contains(tokens, HIGH_RISK) || /\b(across|architecture|large|many|system-wide)\b/i.test(query)) return "DEEP"
   if (
     selected === "change" &&
-    tokens.length <= 12 &&
+    (tokens.length <= 12 || /\b(?:label|literal|text|typo|wording)\b/i.test(query)) &&
+    !/\b(?:test(?:s|ing)?|typecheck|build|lint)\b/i.test(query) &&
     !MULTI_STEP.some((signal) => query.toLowerCase().includes(signal)) &&
     expectedFiles(query, selected) <= 1
   )
