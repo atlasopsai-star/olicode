@@ -11,6 +11,14 @@ const NAVIGATE_TIMEOUT_MS = 20_000
 const ACTION_TIMEOUT_MS = 5_000
 const TEXT_LIMIT = 4_000
 
+// Only a bare hostname (no scheme at all) gets https:// assumed -- a URL that
+// already names any scheme (file://, http://, etc.) is left alone. Local
+// file:// URLs are the standard way to preview a built page without a dev
+// server; blindly prefixing https:// broke them entirely.
+export function resolveUrl(input: string): string {
+  return /^[a-z][a-z0-9+.-]*:\/\//i.test(input) ? input : `https://${input}`
+}
+
 export const Parameters = Schema.Struct({
   action: Schema.Literals([
     "navigate",
@@ -64,7 +72,7 @@ async function snapshotResult(page: Page): Promise<Result> {
 async function perform(page: Page, params: Params, screenshotPath: string | undefined): Promise<Result> {
   if (params.action === "navigate") {
     if (!params.url) throw new Error("navigate requires a url")
-    const target = /^https?:\/\//i.test(params.url) ? params.url : `https://${params.url}`
+    const target = resolveUrl(params.url)
     try {
       await page.goto(target, { waitUntil: "domcontentloaded", timeout: NAVIGATE_TIMEOUT_MS })
     } catch (error) {

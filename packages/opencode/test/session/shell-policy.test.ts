@@ -11,6 +11,14 @@ describe("shell policy", () => {
       "bun test fixture.test.ts",
       "bun run typecheck",
       "bun run build",
+      // Found via OliBench: these got misclassified as UNKNOWN_MUTATION and
+      // auto-rejected in non-interactive mode, breaking an otherwise-working
+      // task that just wanted its own working directory.
+      "pwd",
+      "echo hello",
+      "which node",
+      "whoami",
+      "wc -l src/ui.ts",
     ])
       expect(ShellPolicy.classify(command)).toBe("READ_ONLY")
   })

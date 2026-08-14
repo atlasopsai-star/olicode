@@ -3,7 +3,7 @@ Drive a real Chrome browser deterministically: navigate, inspect, click, type, s
 Every action returns the current page's interactive elements tagged with a stable index -- act on elements by index (e.g. click index 3), never by guessing a CSS selector. Call "snapshot" any time the element list might be stale (after a click that changed the page, for instance).
 
 Actions:
-- navigate: open a URL. Requires "url".
+- navigate: open a URL. Requires "url". A bare hostname (example.com) is assumed https; file:// URLs work for previewing a local file without a dev server.
 - snapshot: re-read the current page's interactive elements without navigating.
 - click: click the element at "index".
 - type: fill the element at "index" with "value".
