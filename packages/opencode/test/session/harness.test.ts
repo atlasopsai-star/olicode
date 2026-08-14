@@ -134,6 +134,25 @@ describe("session.harness", () => {
     expect(contract.budgets.expectedFiles).toBe(0)
   })
 
+  test("routes every basic shipping phrase to the ship action", () => {
+    for (const query of [
+      "commit this",
+      "push this",
+      "open a PR",
+      "open a pull request for this",
+      "deploy this",
+      "give me a Vercel preview",
+      "ship this",
+    ])
+      expect(SessionHarness.action(query)).toBe("ship")
+  })
+
+  test("does not misfire ship on unrelated prose that merely contains shipping-like substrings", () => {
+    expect(SessionHarness.action("I'm fully committed to fixing this bug properly")).not.toBe("ship")
+    expect(SessionHarness.action("Update the shipping address validation in checkout")).not.toBe("ship")
+    expect(SessionHarness.action("Fix the typo in the header")).not.toBe("ship")
+  })
+
   test("extracts explicit constraints, non-goals, evidence, and file scope", () => {
     const contract = SessionHarness.contract(
       "Change src/button.ts. Do not add dependencies. Run the targeted tests and ensure the typecheck passes.",

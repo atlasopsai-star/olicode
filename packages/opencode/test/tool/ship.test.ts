@@ -1,8 +1,10 @@
 import { afterEach, describe, expect } from "bun:test"
-import { Effect, Layer } from "effect"
+import { Cause, Effect, Exit, Layer } from "effect"
 import { ShipTool } from "@/tool/ship"
 import { Tool } from "@/tool/tool"
-import { MessageID, SessionID } from "@/session/schema"
+import { MessageID, PartID, SessionID } from "@/session/schema"
+import { ModelID, ProviderID } from "@/provider/schema"
+import type { MessageV2 } from "@/session/message-v2"
 import { Truncate } from "@/tool/truncate"
 import { Agent } from "@/agent/agent"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
@@ -10,6 +12,35 @@ import { disposeAllInstances, TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
 const it = testEffect(Layer.mergeAll(Truncate.defaultLayer, Agent.defaultLayer, CrossSpawnSpawner.defaultLayer))
+
+const preflight = {
+  info: {
+    id: MessageID.make("msg_ship_preflight"),
+    sessionID: SessionID.make("ses_ship_preflight"),
+    role: "user",
+    time: { created: 1 },
+    agent: "build",
+    model: { providerID: ProviderID.make("test"), modelID: ModelID.make("test") },
+  },
+  parts: [
+    {
+      id: PartID.make("prt_ship_preflight"),
+      messageID: MessageID.make("msg_ship_preflight"),
+      sessionID: SessionID.make("ses_ship_preflight"),
+      type: "tool",
+      callID: "call_ship_preflight",
+      tool: "ship",
+      state: {
+        status: "completed",
+        input: { action: "preflight" },
+        output: "done",
+        title: "ship preflight",
+        metadata: {},
+        time: { start: 0, end: 1 },
+      },
+    },
+  ],
+} as MessageV2.WithParts
 
 afterEach(async () => {
   await disposeAllInstances()
@@ -38,6 +69,90 @@ describe("tool.ship", () => {
       expect(result.metadata.action).toBe("preflight")
       expect(result.output).toContain("status: success")
       expect(result.output).toContain("next_actions:")
+    }),
+  )
+
+  it.instance("preflight reports a missing origin remote instead of failing", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      yield* Effect.promise(() => Bun.$`git init -q`.cwd(test.directory).quiet())
+      const result = yield* run({ action: "preflight" })
+      expect(result.metadata.status).toBe("success")
+      expect(result.output).toContain("(no origin)")
+    }),
+  )
+
+  it.instance("preflight reports Vercel as not linked when no project.json exists", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      yield* Effect.promise(() => Bun.$`git init -q`.cwd(test.directory).quiet())
+      const result = yield* run({ action: "preflight" })
+      expect(result.output).toContain("Vercel not linked")
+    }),
+  )
+
+  it.instance("preflight surfaces a dirty worktree instead of hiding it", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      yield* Effect.promise(() => Bun.$`git init -q`.cwd(test.directory).quiet())
+      yield* Effect.promise(() => Bun.write(`${test.directory}/scratch.txt`, "untracked"))
+      const result = yield* run({ action: "preflight" })
+      expect(result.output).toContain("scratch.txt")
+    }),
+  )
+
+  it.instance("commit rejects a missing file list with a clear message, not a raw crash", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      yield* Effect.promise(() => Bun.$`git init -q`.cwd(test.directory).quiet())
+      const tool = yield* ShipTool.pipe(Effect.flatMap((item) => item.init()))
+      const exit = yield* Effect.exit(
+        tool.execute(
+          { action: "commit", message: "docs: test" },
+          {
+            sessionID: SessionID.make("ses_ship_commit_test"),
+            messageID: MessageID.make("msg_ship_commit_test"),
+            callID: "call_ship_commit_test",
+            agent: "build",
+            abort: AbortSignal.any([]),
+            messages: [preflight],
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
+          },
+        ),
+      )
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit))
+        expect(Cause.prettyErrors(exit.cause).map((error) => error.message).join("\n")).toContain(
+          "commit requires explicit files",
+        )
+    }),
+  )
+
+  it.instance("push against a repo with no configured remote fails with a specific, actionable message", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      yield* Effect.promise(() => Bun.$`git init -q`.cwd(test.directory).quiet())
+      yield* Effect.promise(() => Bun.$`git -c user.email=t@t.com -c user.name=t commit -q --allow-empty -m init`.cwd(test.directory).quiet())
+      const tool = yield* ShipTool.pipe(Effect.flatMap((item) => item.init()))
+      const exit = yield* Effect.exit(
+        tool.execute(
+          { action: "push" },
+          {
+            sessionID: SessionID.make("ses_ship_push_test"),
+            messageID: MessageID.make("msg_ship_push_test"),
+            callID: "call_ship_push_test",
+            agent: "build",
+            abort: AbortSignal.any([]),
+            messages: [preflight],
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
+          },
+        ),
+      )
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit))
+        expect(Cause.prettyErrors(exit.cause).map((error) => error.message).join("\n")).toContain("git push failed")
     }),
   )
 })

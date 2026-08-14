@@ -30,16 +30,19 @@ export const ShipTool = Tool.define(
         Effect.gen(function* () {
           const instance = yield* InstanceState.context
           const command = (args: string[]) =>
-            Effect.tryPromise(async () => {
-              const child = Bun.spawn(args, { cwd: instance.directory, stdout: "pipe", stderr: "pipe" })
-              const [stdout, stderr, exit] = await Promise.all([
-                new Response(child.stdout).text(),
-                new Response(child.stderr).text(),
-                child.exited,
-              ])
-              if (exit !== 0)
-                throw new Error(`${args.slice(0, 2).join(" ")} failed (${exit}): ${stderr.trim() || stdout.trim()}`)
-              return stdout.trim()
+            Effect.tryPromise({
+              try: async () => {
+                const child = Bun.spawn(args, { cwd: instance.directory, stdout: "pipe", stderr: "pipe" })
+                const [stdout, stderr, exit] = await Promise.all([
+                  new Response(child.stdout).text(),
+                  new Response(child.stderr).text(),
+                  child.exited,
+                ])
+                if (exit !== 0)
+                  throw new Error(`${args.slice(0, 2).join(" ")} failed (${exit}): ${stderr.trim() || stdout.trim()}`)
+                return stdout.trim()
+              },
+              catch: (error) => (error instanceof Error ? error : new Error(String(error))),
             })
 
           if (params.action !== "preflight" && !HarnessCore.hasCompletedToolAction(ctx.messages, "ship", "preflight"))

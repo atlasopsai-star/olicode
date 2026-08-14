@@ -513,6 +513,53 @@ it.instance("loop calls LLM and returns assistant message", () =>
   }),
 )
 
+// ShipTool must not read request-scoped instance state while the registry initializes.
+it.instance("loading Ship Harness cannot crash an unrelated normal request", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({
+      title: "Unrelated request",
+      permission: [{ permission: "*", pattern: "*", action: "allow" }],
+    })
+    yield* prompt.prompt({
+      sessionID: chat.id,
+      agent: "build",
+      noReply: true,
+      parts: [{ type: "text", text: "what does this project do?" }],
+    })
+    yield* llm.text("It's a coding assistant.")
+
+    const result = yield* prompt.loop({ sessionID: chat.id })
+    expect(result.info.role).toBe("assistant")
+    if (result.info.role === "assistant") expect(result.info.error).toBeUndefined()
+  }),
+)
+
+it.instance("loading Ship Harness cannot crash a ship-classified request that never calls ship", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({
+      title: "Ship-classified but no ship call",
+      permission: [{ permission: "*", pattern: "*", action: "allow" }],
+    })
+    yield* prompt.prompt({
+      sessionID: chat.id,
+      agent: "build",
+      noReply: true,
+      parts: [{ type: "text", text: "what happens if I commit this file?" }],
+    })
+    yield* llm.text("It would add the file to the next commit.")
+
+    const result = yield* prompt.loop({ sessionID: chat.id })
+    expect(result.info.role).toBe("assistant")
+    if (result.info.role === "assistant") expect(result.info.error).toBeUndefined()
+  }),
+)
+
 it.instance("loop injects OliCode harness guidance for focused browser tasks", () =>
   Effect.gen(function* () {
     const { llm } = yield* useServerConfig(providerCfg)

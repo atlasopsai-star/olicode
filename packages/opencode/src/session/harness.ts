@@ -105,9 +105,12 @@ export function objective(query: string) {
   return query.replace(/\s+/g, " ").trim().slice(0, 240)
 }
 
+const SHIP_PHRASES = /\bpull request\b/i
+
 export function action(query: string): Action {
   const tokens = tokenize(query)
-  if (contains(tokens, SHIP)) return "ship"
+  // Match the phrase because either word alone occurs in unrelated coding tasks.
+  if (contains(tokens, SHIP) || SHIP_PHRASES.test(query)) return "ship"
   if (contains(tokens, DESIGN)) return "design"
   if (contains(tokens, BROWSER)) return "browser"
   if (contains(tokens, DEBUG)) return "debug"
