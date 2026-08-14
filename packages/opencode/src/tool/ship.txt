@@ -1,0 +1,10 @@
+Use this tool only for an explicitly requested shipping workflow.
+
+Actions:
+- preflight: inspect branch, worktree, remote, GitHub CLI auth, and Vercel project link without changing anything.
+- commit: stage only the explicit "files" and create one commit using "message".
+- push: push the current branch to its configured remote.
+- pr: create a GitHub pull request using "title" and "body" and return its URL.
+- deploy: create a Vercel preview deployment and return its URL. Set "production" only when the user explicitly requested production.
+
+Run preflight first. Never infer permission to push, create a PR, deploy, or release to production. After deployment, use the browser tool to open and verify the returned URL.

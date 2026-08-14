@@ -20,6 +20,7 @@ const tasks = JSON.parse(readFileSync(path.join(fixture, "tasks.json"), "utf8"))
   prompt: string
   check: string
   requiredBrowserActions?: string[]
+  requiredShipActions?: string[]
 }>
 
 async function command(args: string[], cwd: string, env: Record<string, string> = {}, timeout?: number) {
@@ -124,6 +125,10 @@ function metrics(output: string) {
       .filter((item) => item.tool === "browser")
       .map((item) => (item.state as Record<string, Record<string, unknown>>).input?.action)
       .filter((item): item is string => typeof item === "string"),
+    shipActions: completed
+      .filter((item) => item.tool === "ship")
+      .map((item) => (item.state as Record<string, Record<string, unknown>>).input?.action)
+      .filter((item): item is string => typeof item === "string"),
     skillsLoaded: completed.filter((item) => item.tool === "skill").length,
     filesRead: new Set(
       completed
@@ -204,9 +209,9 @@ for (const task of tasks) {
         const visual = await capture(directory, task.id, variant, trial)
         const changed = diff.stdout.trim().split("\n").filter(Boolean)
         const observed = metrics(run.stdout)
-        const requiredEvidencePassed = (task.requiredBrowserActions ?? []).every((action) =>
-          observed.browserActions.includes(action),
-        )
+        const requiredEvidencePassed =
+          (task.requiredBrowserActions ?? []).every((action) => observed.browserActions.includes(action)) &&
+          (task.requiredShipActions ?? []).every((action) => observed.shipActions.includes(action))
         results.push({
           task: task.id,
           variant,

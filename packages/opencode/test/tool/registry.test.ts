@@ -35,6 +35,7 @@ import { ToolJsonSchema } from "@/tool/json-schema"
 import { MessageID, SessionID } from "@/session/schema"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { BrowserSession } from "@/browser/session"
+import { SessionHarness } from "@/session/harness"
 
 const node = CrossSpawnSpawner.defaultLayer
 const configLayer = TestConfig.layer({
@@ -109,6 +110,24 @@ afterEach(async () => {
 })
 
 describe("tool.registry", () => {
+  it.instance("exposes ship only for shipping contracts", () =>
+    Effect.gen(function* () {
+      const registry = yield* ToolRegistry.Service
+      const agent = yield* Agent.Service
+      const build = yield* agent.get("build")
+      if (!build) throw new Error("build agent not found")
+      const input = { providerID: ProviderID.opencode, modelID: ModelID.make("test"), agent: build }
+      const normal = yield* registry.tools({ ...input, execution: SessionHarness.execution({ query: "Fix src/app.ts" }) })
+      const shipping = yield* registry.tools({
+        ...input,
+        execution: SessionHarness.execution({ query: "Push this branch and open a PR" }),
+      })
+
+      expect(normal.map((tool) => tool.id)).not.toContain("ship")
+      expect(shipping.map((tool) => tool.id)).toContain("ship")
+    }),
+  )
+
   it.instance("hides repo research tools unless experimental", () =>
     Effect.gen(function* () {
       const registry = yield* ToolRegistry.Service

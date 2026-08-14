@@ -107,6 +107,36 @@ describe("harness core", () => {
     ).toBe(true)
   })
 
+  test("SHIP records deterministic shipping and deployed browser proof", () => {
+    const filePath = "/repo/src/page.tsx"
+    const result = HarnessCore.proof(
+      [
+        tool("read", { filePath }),
+        tool("edit", { filePath }, { filediff: { file: filePath, additions: 1, deletions: 1 } }),
+        tool("shell", { command: "bun test" }, { exit: 0 }),
+        tool("ship", { action: "deploy" }),
+        tool("browser", { action: "navigate", url: "https://preview.example" }),
+        tool("browser", { action: "console" }),
+      ],
+      SessionHarness.contract("Deploy src/page.tsx to Vercel and verify it"),
+    )
+    expect(result.stop).toBe(true)
+    expect(result.missing).toEqual([])
+  })
+
+  test("raw shell shipping commands do not satisfy deterministic ship proof", () => {
+    const contract = SessionHarness.contract("Run tests and a shipping preflight. Do not commit, push, or deploy.")
+    const result = HarnessCore.proof(
+      [
+        tool("shell", { command: "bun test" }, { exit: 0 }),
+        tool("shell", { command: "git status --short" }, { exit: 0 }),
+      ],
+      contract,
+    )
+    expect(result.missing).toContain("git")
+    expect(result.stop).toBe(false)
+  })
+
   test("telemetry detects repeated exploration", () => {
     const messages = [
       tool("read", { filePath: "/repo/src/button.ts" }),

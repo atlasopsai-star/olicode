@@ -107,6 +107,7 @@ export const layer = Layer.effect(
           "*": "allow",
           doom_loop: "ask",
           shell_mutation: "ask",
+          ship: "ask",
           external_directory: {
             "*": "ask",
             ...Object.fromEntries(whitelistedDirs.map((dir) => [dir, "allow"])),

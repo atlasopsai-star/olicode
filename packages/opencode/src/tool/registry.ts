@@ -26,6 +26,7 @@ import { RepoCloneTool } from "./repo_clone"
 import { RepoOverviewTool } from "./repo_overview"
 import { ScopeCheckTool } from "./scope_check"
 import { BrowserTool } from "./browser"
+import { ShipTool } from "./ship"
 import { BrowserSession } from "@/browser/session"
 import { RepositoryCache } from "@/reference/repository-cache"
 import * as Log from "@opencode-ai/core/util/log"
@@ -138,6 +139,7 @@ export const layer: Layer.Layer<
     const repoOverview = yield* RepoOverviewTool
     const scopeCheck = yield* ScopeCheckTool
     const browserTool = yield* BrowserTool
+    const shipTool = yield* ShipTool
     const shell = yield* ShellTool
     const globtool = yield* GlobTool
     const writetool = yield* WriteTool
@@ -251,6 +253,7 @@ export const layer: Layer.Layer<
           repo_overview: Tool.init(repoOverview),
           scope_check: Tool.init(scopeCheck),
           browser: Tool.init(browserTool),
+          ship: Tool.init(shipTool),
           skill: Tool.init(skilltool),
           patch: Tool.init(patchtool),
           question: Tool.init(question),
@@ -276,6 +279,7 @@ export const layer: Layer.Layer<
             ...(flags.experimentalScout ? [tool.repo_clone, tool.repo_overview] : []),
             tool.scope_check,
             tool.browser,
+            tool.ship,
             tool.skill,
             tool.patch,
             ...(flags.experimentalLspTool ? [tool.lsp] : []),
@@ -332,6 +336,7 @@ export const layer: Layer.Layer<
         // out of unrelated tasks entirely rather than just discouraging use.
         if (input.execution && tool.id === "browser" && !["browser", "design"].includes(input.execution.mode))
           return false
+        if (input.execution && tool.id === "ship" && input.execution.mode !== "ship") return false
         // task (subagent dispatch) stays available for inspect/research -- those
         // actions are exactly when spinning up an investigation subagent is
         // warranted; blocking it hangs any subagent dispatch in that mode.

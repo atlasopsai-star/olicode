@@ -1,5 +1,6 @@
 import type { Agent } from "@/agent/agent"
 import { Design } from "./design-contract"
+import { Ship } from "./ship-contract"
 
 export type Action = "answer" | "inspect" | "change" | "debug" | "design" | "research" | "browser" | "ship"
 export type RigorLevel = "FAST" | "STANDARD" | "DEEP" | "DEBUG" | "DESIGN" | "RESEARCH" | "BROWSER" | "SHIP"
@@ -18,6 +19,9 @@ export type EvidenceRequirement = {
     | "narrow-screenshot"
     | "console"
     | "git"
+    | "commit"
+    | "push"
+    | "pr"
     | "deploy"
   description: string
 }
@@ -54,7 +58,7 @@ const DEBUG = ["bug", "debug", "error", "failing", "failure", "regression", "tra
 const DESIGN = ["design", "frontend", "landing", "polish", "redesign", "ui", "ux", "visual"]
 const RESEARCH = ["analyze", "audit", "compare", "evaluate", "inspect", "investigate", "research", "review"]
 const BROWSER = ["browser", "click", "dom", "navigate", "playwright", "screenshot"]
-const SHIP = ["deploy", "launch", "pr", "production", "publish", "push", "release", "ship", "vercel"]
+const SHIP = ["commit", "deploy", "launch", "pr", "production", "publish", "push", "release", "ship", "vercel"]
 const HIGH_RISK = [
   "auth",
   "billing",
@@ -125,8 +129,9 @@ function expectedFiles(query: string, selected: Action) {
   if (paths > 0)
     return Math.min(paths + (/\b(?:add|write|create) (?:a )?(?:focused |regression )?test\b/i.test(query) ? 1 : 0), 10)
   if (selected === "answer" || selected === "inspect" || selected === "research") return 0
+  if (selected === "ship") return 0
   if (/\b(tiny|typo|label|wording|rename)\b/i.test(query)) return 1
-  return selected === "ship" || selected === "design" ? 5 : 3
+  return selected === "design" ? 5 : 3
 }
 
 export function rigor(query: string, selected = action(query)): RigorLevel {
@@ -150,6 +155,9 @@ export function rigor(query: string, selected = action(query)): RigorLevel {
 
 function evidence(query: string, selected: Action, level: RigorLevel): EvidenceRequirement[] {
   if (selected === "answer" || selected === "inspect" || selected === "research") return []
+  const requested = sentences(query)
+    .filter((item) => !/\b(?:do not|don't|never|without)\b/i.test(item))
+    .join(" ")
   const base: EvidenceRequirement[] = [
     { id: "change", description: "The requested change is present." },
     { id: "validation", description: "A targeted validation completed successfully." },
@@ -163,7 +171,7 @@ function evidence(query: string, selected: Action, level: RigorLevel): EvidenceR
       { id: "build", description: "The user-requested build passed." },
     ],
     [/\bdeploy|vercel\b/i, { id: "deploy", description: "The requested deployment completed and returned a result." }],
-  ].flatMap(([pattern, requirement]) => ((pattern as RegExp).test(query) ? [requirement as EvidenceRequirement] : []))
+  ].flatMap(([pattern, requirement]) => ((pattern as RegExp).test(requested) ? [requirement as EvidenceRequirement] : []))
   if (level === "FAST") return [...base, ...explicit.filter((item) => !base.some((base) => base.id === item.id))]
   if (level === "DESIGN")
     return [
@@ -177,9 +185,23 @@ function evidence(query: string, selected: Action, level: RigorLevel): EvidenceR
   if (level === "BROWSER") return [{ id: "browser", description: "The requested browser assertions passed." }]
   if (level === "SHIP")
     return [
-      ...base,
+      { id: "scope", description: "Every changed file is relevant to the task contract." },
       { id: "tests", description: "Required tests passed." },
-      { id: "git", description: "Git state and requested remote result were verified." },
+      ...(/\bcommit\b/i.test(requested) ? [{ id: "commit" as const, description: "The requested commit was created." }] : []),
+      ...(/\bpush\b/i.test(requested) ? [{ id: "push" as const, description: "The requested branch was pushed." }] : []),
+      ...(/\b(?:pull request|\bpr\b)/i.test(requested)
+        ? [{ id: "pr" as const, description: "The requested pull request was created and returned a URL." }]
+        : []),
+      ...(/\bdeploy|vercel\b/i.test(requested)
+        ? [
+            { id: "deploy" as const, description: "The requested deployment returned a URL." },
+            { id: "browser" as const, description: "The deployed URL was verified in the browser." },
+            { id: "console" as const, description: "The deployed page console was inspected." },
+          ]
+        : []),
+      ...(!/\b(?:commit|push|pull request|\bpr\b|deploy|vercel)\b/i.test(requested)
+        ? [{ id: "git" as const, description: "Git shipping readiness was inspected." }]
+        : []),
     ]
   const standard: EvidenceRequirement[] = [
     ...base,
@@ -284,6 +306,7 @@ export function render(input: { agent: Agent.Info; query: string }) {
     "Final response style: tight. State outcome, changed files, verification, and unresolved issues only.",
     "</olicode_harness>",
     active.action === "design" ? Design.checklist(Design.contract(input.query)) : undefined,
+    active.action === "ship" ? Ship.checklist(Ship.contract(input.query)) : undefined,
   ]
     .filter(Boolean)
     .join("\n")

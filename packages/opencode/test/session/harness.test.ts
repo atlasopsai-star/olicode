@@ -106,6 +106,34 @@ describe("session.harness", () => {
     ])
   })
 
+  test("deployment contracts require URL and deployed browser evidence", () => {
+    expect(SessionHarness.contract("Deploy this to Vercel and verify it").requiredEvidence.map((item) => item.id)).toEqual([
+      "scope",
+      "tests",
+      "deploy",
+      "browser",
+      "console",
+    ])
+  })
+
+  test("shipping proof matches the exact external action", () => {
+    expect(SessionHarness.contract("Commit the changes, push them, and open a PR").requiredEvidence.map((item) => item.id)).toEqual([
+      "scope",
+      "tests",
+      "commit",
+      "push",
+      "pr",
+    ])
+  })
+
+  test("shipping non-goals do not become required proof", () => {
+    const contract = SessionHarness.contract(
+      "Run a shipping preflight and report readiness. Do not commit, push, open a PR, or deploy.",
+    )
+    expect(contract.requiredEvidence.map((item) => item.id)).toEqual(["scope", "tests", "git"])
+    expect(contract.budgets.expectedFiles).toBe(0)
+  })
+
   test("extracts explicit constraints, non-goals, evidence, and file scope", () => {
     const contract = SessionHarness.contract(
       "Change src/button.ts. Do not add dependencies. Run the targeted tests and ensure the typecheck passes.",

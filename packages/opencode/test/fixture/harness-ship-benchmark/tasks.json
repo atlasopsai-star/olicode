@@ -1,0 +1,8 @@
+[
+  {
+    "id": "ship-preflight",
+    "prompt": "Run the required test and a shipping preflight, then report whether this project is ready. Do not change files, commit, push, open a PR, or deploy.",
+    "check": "if (!(await Bun.file('./package.json').exists())) process.exit(1)",
+    "requiredShipActions": ["preflight"]
+  }
+]
