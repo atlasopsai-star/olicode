@@ -57,8 +57,7 @@ import { Permission } from "@/permission"
 import { Reference } from "@/reference/reference"
 import { BackgroundJob } from "@/background/job"
 import { RuntimeFlags } from "@/effect/runtime-flags"
-import type { Action, RigorLevel } from "@/session/harness"
-import { SessionHarness } from "@/session/harness"
+import { SessionHarness, type Execution } from "@/session/harness"
 
 const log = Log.create({ service: "tool.registry" })
 
@@ -66,12 +65,18 @@ export function webSearchEnabled(providerID: ProviderID, flags = { exa: false, p
   return providerID === ProviderID.opencode || flags.exa || flags.parallel
 }
 
-export function visibleForExecution(toolID: string, execution?: { mode: Action; rigor: RigorLevel }) {
+export function visibleForExecution(toolID: string, execution?: Execution) {
   if (!execution) return true
   // Harness completion already runs the authoritative post-diff ScopeGuard.
   // Exposing the manual check makes models spend an extra tool call repeating it.
   if (toolID === "scope_check") return false
   if (execution.rigor === "FAST" && ["task", "webfetch", "websearch", "skill", "todowrite"].includes(toolID))
+    return false
+  if (
+    execution.rigor === "FAST" &&
+    execution.contract.allowedScope.some((item) => item !== ".") &&
+    ["glob", "grep"].includes(toolID)
+  )
     return false
   if (toolID === "todowrite" && execution.mode === "change" && execution.rigor === "STANDARD") return false
   if (toolID === "browser") return ["browser", "design"].includes(execution.mode)
@@ -97,7 +102,7 @@ export interface Interface {
     providerID: ProviderID
     modelID: ModelID
     agent: Agent.Info
-    execution?: { mode: Action; rigor: RigorLevel }
+    execution?: Execution
   }) => Effect.Effect<Tool.Def[]>
 }
 

@@ -131,6 +131,8 @@ describe("tool.registry", () => {
     expect(execution.rigor).toBe("FAST")
     for (const tool of ["task", "webfetch", "websearch", "skill", "todowrite"])
       expect(visibleForExecution(tool, execution)).toBe(false)
+    expect(visibleForExecution("glob", execution)).toBe(false)
+    expect(visibleForExecution("grep", execution)).toBe(false)
     expect(visibleForExecution("read", execution)).toBe(true)
   })
 
