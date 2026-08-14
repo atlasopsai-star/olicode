@@ -1550,6 +1550,9 @@ export const layer = Layer.effect(
             const system = [...env, harness, ...instructions, ...(skills ? [skills] : [])]
             const format = lastUser.format ?? { type: "text" as const }
             if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
+            const requireShipPreflight =
+              execution.mode === "ship" && !HarnessCore.hasCompletedToolAction(msgs, "ship", "preflight")
+            const activeTools = requireShipPreflight && tools.ship ? { ship: tools.ship } : tools
             const result = yield* handle.process({
               user: lastUser,
               agent,
@@ -1558,9 +1561,9 @@ export const layer = Layer.effect(
               parentSessionID: session.parentID,
               system,
               messages: [...modelMsgs, ...(isLastStep ? [{ role: "assistant" as const, content: MAX_STEPS }] : [])],
-              tools,
+              tools: activeTools,
               model,
-              toolChoice: format.type === "json_schema" ? "required" : undefined,
+              toolChoice: format.type === "json_schema" || requireShipPreflight ? "required" : undefined,
             })
 
             if (structured !== undefined) {

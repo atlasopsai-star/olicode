@@ -1,4 +1,4 @@
-Use this tool only for an explicitly requested shipping workflow.
+Use this tool only for an explicitly requested shipping workflow. Your first call in every shipping workflow MUST be exactly {"action":"preflight"}; other actions are rejected until that succeeds.
 
 Actions:
 - preflight: inspect branch, worktree, remote, GitHub CLI auth, and Vercel project link without changing anything.

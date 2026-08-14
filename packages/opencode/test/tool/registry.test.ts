@@ -1,10 +1,10 @@
-import { afterEach, describe, expect } from "bun:test"
+import { afterEach, describe, expect, test } from "bun:test"
 import path from "path"
 import fs from "fs/promises"
 import { fileURLToPath, pathToFileURL } from "url"
 import { Effect, Layer, Result, Schema } from "effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { ToolRegistry } from "@/tool/registry"
+import { ToolRegistry, visibleForExecution } from "@/tool/registry"
 import { Tool } from "@/tool/tool"
 import { disposeAllInstances, TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
@@ -110,23 +110,10 @@ afterEach(async () => {
 })
 
 describe("tool.registry", () => {
-  it.instance("exposes ship only for shipping contracts", () =>
-    Effect.gen(function* () {
-      const registry = yield* ToolRegistry.Service
-      const agent = yield* Agent.Service
-      const build = yield* agent.get("build")
-      if (!build) throw new Error("build agent not found")
-      const input = { providerID: ProviderID.opencode, modelID: ModelID.make("test"), agent: build }
-      const normal = yield* registry.tools({ ...input, execution: SessionHarness.execution({ query: "Fix src/app.ts" }) })
-      const shipping = yield* registry.tools({
-        ...input,
-        execution: SessionHarness.execution({ query: "Push this branch and open a PR" }),
-      })
-
-      expect(normal.map((tool) => tool.id)).not.toContain("ship")
-      expect(shipping.map((tool) => tool.id)).toContain("ship")
-    }),
-  )
+  test("exposes ship only for shipping contracts", () => {
+    expect(visibleForExecution("ship", SessionHarness.execution({ query: "Fix src/app.ts" }))).toBe(false)
+    expect(visibleForExecution("ship", SessionHarness.execution({ query: "Push this branch and open a PR" }))).toBe(true)
+  })
 
   it.instance("hides repo research tools unless experimental", () =>
     Effect.gen(function* () {

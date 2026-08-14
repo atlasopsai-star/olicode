@@ -137,6 +137,11 @@ describe("harness core", () => {
     expect(result.stop).toBe(false)
   })
 
+  test("detects completed deterministic ship preflight", () => {
+    expect(HarnessCore.hasCompletedToolAction([tool("ship", { action: "preflight" })], "ship", "preflight")).toBe(true)
+    expect(HarnessCore.hasCompletedToolAction([tool("shell", { command: "git status" })], "ship", "preflight")).toBe(false)
+  })
+
   test("telemetry detects repeated exploration", () => {
     const messages = [
       tool("read", { filePath: "/repo/src/button.ts" }),

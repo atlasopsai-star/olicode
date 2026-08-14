@@ -66,6 +66,13 @@ export function webSearchEnabled(providerID: ProviderID, flags = { exa: false, p
   return providerID === ProviderID.opencode || flags.exa || flags.parallel
 }
 
+export function visibleForExecution(toolID: string, execution?: { mode: Action; rigor: RigorLevel }) {
+  if (!execution) return true
+  if (toolID === "browser") return ["browser", "design"].includes(execution.mode)
+  if (toolID === "ship") return execution.mode === "ship"
+  return true
+}
+
 type TaskDef = Tool.InferDef<typeof TaskTool>
 type ReadDef = Tool.InferDef<typeof ReadTool>
 
@@ -334,9 +341,7 @@ export const layer: Layer.Layer<
           return false
         // The browser tool spins up a real Chrome process -- keep its schema
         // out of unrelated tasks entirely rather than just discouraging use.
-        if (input.execution && tool.id === "browser" && !["browser", "design"].includes(input.execution.mode))
-          return false
-        if (input.execution && tool.id === "ship" && input.execution.mode !== "ship") return false
+        if (!visibleForExecution(tool.id, input.execution)) return false
         // task (subagent dispatch) stays available for inspect/research -- those
         // actions are exactly when spinning up an investigation subagent is
         // warranted; blocking it hangs any subagent dispatch in that mode.

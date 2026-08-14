@@ -198,7 +198,11 @@ for (const item of targets) {
     conditions: ["browser"],
     tsconfig: "./tsconfig.json",
     plugins: [plugin],
-    external: ["node-gyp"],
+    // Playwright's BiDi bridge is only used by WebDriver-BiDi/CDP bridging,
+    // not OliCode's configured local Chromium adapter. playwright-core 1.59
+    // references this optional package without declaring it, so keep that
+    // unused path out of standalone binaries.
+    external: ["node-gyp", "chromium-bidi/*"],
     format: "esm",
     minify: true,
     sourcemap: sourcemapsFlag ? "linked" : "none",

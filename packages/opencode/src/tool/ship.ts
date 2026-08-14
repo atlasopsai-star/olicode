@@ -1,6 +1,7 @@
 import path from "path"
 import { Effect, Schema } from "effect"
 import { InstanceState } from "@/effect/instance-state"
+import { HarnessCore } from "@/session/harness-core"
 import * as Tool from "./tool"
 import DESCRIPTION from "./ship.txt"
 
@@ -29,7 +30,7 @@ export const ShipTool = Tool.define(
         Effect.gen(function* () {
           const instance = yield* InstanceState.context
           const command = (args: string[]) =>
-            Effect.promise(async () => {
+            Effect.tryPromise(async () => {
               const child = Bun.spawn(args, { cwd: instance.directory, stdout: "pipe", stderr: "pipe" })
               const [stdout, stderr, exit] = await Promise.all([
                 new Response(child.stdout).text(),
@@ -40,6 +41,9 @@ export const ShipTool = Tool.define(
                 throw new Error(`${args.slice(0, 2).join(" ")} failed (${exit}): ${stderr.trim() || stdout.trim()}`)
               return stdout.trim()
             })
+
+          if (params.action !== "preflight" && !HarnessCore.hasCompletedToolAction(ctx.messages, "ship", "preflight"))
+            throw new Error("Run ship(preflight) before any shipping mutation.")
 
           if (params.action === "preflight") {
             const [status, branch, remote, github] = yield* Effect.all([

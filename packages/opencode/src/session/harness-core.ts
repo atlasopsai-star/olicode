@@ -143,6 +143,10 @@ export function proof(messages: MessageV2.WithParts[], contract: OliTaskContract
   }
 }
 
+export function hasCompletedToolAction(messages: MessageV2.WithParts[], tool: string, action: string) {
+  return completedTools(messages).some((part) => part.tool === tool && part.state.input.action === action)
+}
+
 export function rollbackCandidates(messages: MessageV2.WithParts[], result: Proof) {
   const tools = completedTools(messages)
   return result.scope.flatMap((item) => {
