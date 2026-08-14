@@ -47,8 +47,13 @@ async function command(args: string[], cwd: string, env: Record<string, string> 
     ? new Promise<{ stdout: string; stderr: string; exitCode: number }>((resolve) =>
         (timer = setTimeout(() => {
           timedOut = true
-          process.kill(-child.pid, "SIGKILL")
           resolve({ stdout: "", stderr: `Command timed out after ${timeout}ms`, exitCode: 124 })
+          child.kill("SIGKILL")
+          try {
+            process.kill(-child.pid, "SIGKILL")
+          } catch {
+            // The direct child may have exited while a descendant kept an output handle open.
+          }
         }, timeout).unref()),
       )
     : undefined
