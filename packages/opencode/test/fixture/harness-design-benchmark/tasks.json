@@ -1,0 +1,8 @@
+[
+  {
+    "id": "premium-local-service",
+    "prompt": "Redesign index.html into a complete premium, distinctive homepage for Northline, a high-end residential climate and air-quality company serving design-conscious homeowners. Include a hero, differentiated services, an approach/trust section, a usable booking form, and a footer. Preserve the Book an assessment action and use only local HTML/CSS/JS with no dependencies or external assets. Avoid a generic AI SaaS template and do not use viewport-scale empty space as a substitute for content. Run the build and tests, render the result in the browser, inspect the console, and capture both wide and narrow screenshots before finishing.",
+    "check": "const page = await Bun.file('index.html').text(); if (!page.includes('Northline') || !page.includes('Book an assessment') || !page.includes('<form') || (page.match(/<section/g) ?? []).length < 4 || page.length < 3500) process.exit(1)",
+    "requiredBrowserActions": ["navigate", "viewport", "screenshot", "console"]
+  }
+]

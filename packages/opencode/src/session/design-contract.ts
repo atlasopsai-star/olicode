@@ -7,6 +7,14 @@ export type DesignBrief = {
 
 export type Contract = {
   brief: DesignBrief
+  audience: string
+  visualDirection: string
+  variance: "low" | "medium" | "high"
+  motion: "restrained" | "expressive"
+  density: "airy" | "balanced" | "dense"
+  typographyDirection: string
+  layoutDirection: string
+  colorDirection: string
   avoidPatterns: string[]
   responsiveRequirements: string[]
   accessibilityRequirements: string[]
@@ -19,6 +27,7 @@ const PRODUCT_TYPES: Array<[RegExp, string]> = [
   [/\bportfolio\b/i, "portfolio"],
   [/\badmin panel\b|\bback ?office\b/i, "admin panel"],
   [/\bmarketing (?:site|page)\b/i, "marketing site"],
+  [/\bhomepage\b|\blocal service\b/i, "local service homepage"],
   [/\bblog\b/i, "blog"],
   [/\bsaas\b/i, "SaaS product"],
 ]
@@ -43,6 +52,9 @@ const AVOID_PATTERNS = [
   "a centered hero built around generic stock-photo-style illustration",
   "the default system font stack with no deliberate type pairing",
   "uniform rounded-xl cards applied everywhere regardless of content",
+  "repeating boxed cards where hierarchy, editorial composition, lists, or a single structured surface would communicate better",
+  "pill-shaped navigation and labels used as a default visual motif",
+  "viewport-scale empty regions used to simulate luxury while leaving the product journey incomplete",
   "glassmorphism or glow effects with no stated rationale",
   "a mobile view that is just the desktop layout stacked vertically",
 ]
@@ -64,8 +76,30 @@ export function brief(query: string): DesignBrief {
 }
 
 export function contract(query: string): Contract {
+  const active = brief(query)
+  const audience =
+    (query.match(/\bserving\s+([^.!?]+)/i) ?? query.match(/\bfor\s+([^.!?]+)/i))?.[1]?.trim() ??
+    "the product's stated users"
+  const premium = active.brandAttributes.includes("premium")
   return {
-    brief: brief(query),
+    brief: active,
+    audience,
+    visualDirection: premium
+      ? "restrained editorial luxury grounded in the product's real materials, language, and customer context"
+      : "a distinctive, product-specific system with an intentional visual point of view",
+    variance: /\b(?:distinctive|bold|non-generic|not (?:a )?generic)\b/i.test(query) ? "high" : "medium",
+    motion: /\b(?:animated|motion|interactive)\b/i.test(query) ? "expressive" : "restrained",
+    density: active.productType === "dashboard" ? "dense" : "balanced",
+    typographyDirection: premium
+      ? "editorial display typography paired with a highly legible restrained text face"
+      : "deliberate type hierarchy chosen for the product rather than a default system stack",
+    layoutDirection:
+      active.productType === "local service homepage"
+        ? "an editorial, asymmetrical service narrative with varied section composition and a clear booking journey"
+        : "vary composition by content hierarchy; do not turn every concept into another interchangeable card",
+    colorDirection: premium
+      ? "a restrained material palette with excellent contrast and one purposeful accent"
+      : "a product-specific palette with accessible contrast and controlled accents",
     avoidPatterns: AVOID_PATTERNS,
     responsiveRequirements: [
       "Check the layout at a narrow mobile width, not only desktop.",
@@ -84,6 +118,12 @@ export function checklist(active: Contract) {
     `Product type: ${active.brief.productType}`,
     `Brand attributes to express: ${active.brief.brandAttributes.join(", ")}`,
     `Platform: ${active.brief.platform}`,
+    `Audience: ${active.audience}`,
+    `Visual direction: ${active.visualDirection}`,
+    `Variance: ${active.variance}; motion: ${active.motion}; density: ${active.density}`,
+    `Typography: ${active.typographyDirection}`,
+    `Layout: ${active.layoutDirection}`,
+    `Color: ${active.colorDirection}`,
     "Avoid, unless a stated reason makes it the right call here:",
     ...active.avoidPatterns.map((item) => `- ${item}`),
     ...active.responsiveRequirements.map((item) => `- ${item}`),

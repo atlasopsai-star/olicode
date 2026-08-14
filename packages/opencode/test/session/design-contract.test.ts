@@ -27,6 +27,17 @@ describe("Design.contract", () => {
     expect(active.responsiveRequirements.length).toBeGreaterThan(0)
     expect(active.accessibilityRequirements.length).toBeGreaterThan(0)
   })
+
+  test("creates product-specific direction for a premium local service homepage", () => {
+    const active = Design.contract(
+      "Build a distinctive premium homepage for a climate company serving design-conscious homeowners.",
+    )
+    expect(active.brief.productType).toBe("local service homepage")
+    expect(active.audience).toBe("design-conscious homeowners")
+    expect(active.layoutDirection).toContain("editorial, asymmetrical")
+    expect(active.typographyDirection).toContain("editorial display")
+    expect(active.variance).toBe("high")
+  })
 })
 
 describe("Design.checklist", () => {

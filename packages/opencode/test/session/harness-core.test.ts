@@ -83,6 +83,30 @@ describe("harness core", () => {
     expect(result.missing).toContain("validation")
   })
 
+  test("DESIGN requires wide and narrow screenshots plus console evidence", () => {
+    const filePath = "/repo/src/page.tsx"
+    const contract = SessionHarness.contract("Redesign the landing page UI in src/page.tsx")
+    const base = [
+      tool("read", { filePath }),
+      tool("edit", { filePath }, { filediff: { file: filePath, additions: 4, deletions: 2 } }),
+      tool("shell", { command: "bun run build" }, { exit: 0 }),
+      tool("browser", { action: "navigate", url: "http://localhost:3000" }),
+      tool("browser", { action: "screenshot" }),
+    ]
+    expect(HarnessCore.proof(base, contract).missing).toEqual(["narrow-screenshot", "console"])
+    expect(
+      HarnessCore.proof(
+        [
+          ...base,
+          tool("browser", { action: "viewport", width: 390, height: 844 }),
+          tool("browser", { action: "screenshot" }),
+          tool("browser", { action: "console" }),
+        ],
+        contract,
+      ).stop,
+    ).toBe(true)
+  })
+
   test("telemetry detects repeated exploration", () => {
     const messages = [
       tool("read", { filePath: "/repo/src/button.ts" }),

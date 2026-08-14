@@ -20,6 +20,10 @@ describe("session.harness", () => {
     )
   })
 
+  test("design remains the primary workflow when browser QA is requested", () => {
+    expect(SessionHarness.action("Redesign the landing page UI and verify it with browser screenshots")).toBe("design")
+  })
+
   test("render injects concise focus rules", () => {
     const output = SessionHarness.render({
       agent: build,
@@ -87,6 +91,19 @@ describe("session.harness", () => {
 
   test("read-only requests do not authorize mutation", () => {
     expect(SessionHarness.contract("Audit the provider architecture").action).toBe("inspect")
+  })
+
+  test("design contracts require rendered responsive evidence", () => {
+    expect(SessionHarness.contract("Redesign src/page.tsx UI").requiredEvidence.map((item) => item.id)).toEqual([
+      "change",
+      "validation",
+      "scope",
+      "build",
+      "browser",
+      "wide-screenshot",
+      "narrow-screenshot",
+      "console",
+    ])
   })
 
   test("extracts explicit constraints, non-goals, evidence, and file scope", () => {

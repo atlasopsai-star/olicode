@@ -6,7 +6,19 @@ export type RigorLevel = "FAST" | "STANDARD" | "DEEP" | "DEBUG" | "DESIGN" | "RE
 export type ResponseDetail = "tight" | "normal" | "detailed"
 
 export type EvidenceRequirement = {
-  id: "change" | "validation" | "tests" | "typecheck" | "build" | "scope" | "browser" | "git" | "deploy"
+  id:
+    | "change"
+    | "validation"
+    | "tests"
+    | "typecheck"
+    | "build"
+    | "scope"
+    | "browser"
+    | "wide-screenshot"
+    | "narrow-screenshot"
+    | "console"
+    | "git"
+    | "deploy"
   description: string
 }
 
@@ -92,8 +104,8 @@ export function objective(query: string) {
 export function action(query: string): Action {
   const tokens = tokenize(query)
   if (contains(tokens, SHIP)) return "ship"
-  if (contains(tokens, BROWSER)) return "browser"
   if (contains(tokens, DESIGN)) return "design"
+  if (contains(tokens, BROWSER)) return "browser"
   if (contains(tokens, DEBUG)) return "debug"
   if (contains(tokens, MUTATION)) return "change"
   if (contains(tokens, RESEARCH))
@@ -158,6 +170,9 @@ function evidence(query: string, selected: Action, level: RigorLevel): EvidenceR
       ...base,
       { id: "build", description: "The project builds." },
       { id: "browser", description: "The rendered result was checked with the browser tool." },
+      { id: "wide-screenshot", description: "A wide rendered screenshot was captured." },
+      { id: "narrow-screenshot", description: "A narrow rendered screenshot was captured." },
+      { id: "console", description: "The rendered page console was inspected." },
     ]
   if (level === "BROWSER") return [{ id: "browser", description: "The requested browser assertions passed." }]
   if (level === "SHIP")
@@ -259,6 +274,7 @@ export function render(input: { agent: Agent.Info; query: string }) {
     `Objective: ${active.objective}`,
     `Expected files: ${active.budgets.expectedFiles ?? "unknown"}`,
     `New dependency budget: ${active.budgets.maxNewDependencies ?? 0}`,
+    `Required proof: ${active.requiredEvidence.map((item) => item.id).join(", ") || "none"}`,
     "Use the smallest correct implementation. Reuse existing code, platform behavior, standard library, and installed dependencies before adding code or dependencies.",
     "Every substantial action must materially help the task contract. Do not perform drive-by cleanup, unrelated formatting, or speculative work.",
     active.rigor === "FAST"

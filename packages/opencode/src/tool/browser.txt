@@ -8,6 +8,7 @@ Actions:
 - click: click the element at "index".
 - type: fill the element at "index" with "value".
 - screenshot: capture the current page as an image. Pass "path" to save it to a file instead of returning it inline.
+- viewport: set the page viewport using "width" and "height" before responsive screenshots.
 - text: return the page's visible text content, truncated.
 - console: return recent console messages and page errors.
 - back: go back to the previous page.

@@ -26,6 +26,7 @@ export const Parameters = Schema.Struct({
     "click",
     "type",
     "screenshot",
+    "viewport",
     "text",
     "console",
     "back",
@@ -39,6 +40,8 @@ export const Parameters = Schema.Struct({
   path: Schema.optional(Schema.String).annotate({
     description: "Save the screenshot to this file path instead of returning it inline (action: screenshot)",
   }),
+  width: Schema.optional(Schema.Number).annotate({ description: "Viewport width in pixels (action: viewport)" }),
+  height: Schema.optional(Schema.Number).annotate({ description: "Viewport height in pixels (action: viewport)" }),
 })
 
 type Params = Schema.Schema.Type<typeof Parameters>
@@ -128,6 +131,16 @@ async function perform(page: Page, params: Params, screenshotPath: string | unde
       attachments: [
         { type: "file", mime: "image/png", url: `data:image/png;base64,${Buffer.from(bytes).toString("base64")}` },
       ],
+    }
+  }
+
+  if (params.action === "viewport") {
+    if (!params.width || !params.height) throw new Error("viewport requires positive width and height")
+    await page.setViewportSize({ width: params.width, height: params.height })
+    return {
+      title: `${params.width}x${params.height}`,
+      metadata: { action: "viewport", url: page.url() },
+      output: `Viewport set to ${params.width}x${params.height}.`,
     }
   }
 

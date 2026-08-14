@@ -112,7 +112,20 @@ export function proof(messages: MessageV2.WithParts[], contract: OliTaskContract
   if (/\b(typecheck|tsc|tsgo)\b/i.test(command)) facts.add("typecheck")
   if (/\b(build|cargo build|go build)\b/i.test(command)) facts.add("build")
   if (!scope.some((item) => item.classification === "UNRELATED")) facts.add("scope")
-  if (tools.some((part) => /browser|playwright/i.test(part.tool))) facts.add("browser")
+  const browser = tools.filter((part) => /browser|playwright/i.test(part.tool))
+  if (browser.length) facts.add("browser")
+  const screenshotWidths = browser.reduce(
+    (state, part) => {
+      if (part.state.input.action === "viewport" && typeof part.state.input.width === "number")
+        return { ...state, width: part.state.input.width }
+      if (part.state.input.action !== "screenshot") return state
+      return { ...state, screenshots: [...state.screenshots, state.width] }
+    },
+    { width: 1280, screenshots: [] as number[] },
+  ).screenshots
+  if (screenshotWidths.some((width) => width >= 1000)) facts.add("wide-screenshot")
+  if (screenshotWidths.some((width) => width <= 500)) facts.add("narrow-screenshot")
+  if (browser.some((part) => part.state.input.action === "console")) facts.add("console")
   if (/\bgit (status|push|commit)|gh pr\b/i.test(command)) facts.add("git")
   if (/\bvercel\b.*\bdeploy|vercel deploy\b/i.test(command)) facts.add("deploy")
   const required = contract.requiredEvidence.map((item) => item.id)

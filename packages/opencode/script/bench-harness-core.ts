@@ -1,6 +1,7 @@
-import { cpSync, mkdtempSync, readFileSync, rmSync } from "node:fs"
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs"
 import os from "node:os"
 import path from "node:path"
+import { pathToFileURL } from "node:url"
 
 const model = process.env.OLI_BENCH_MODEL
 if (!model) throw new Error("Set OLI_BENCH_MODEL to the exact provider/model used for both variants.")
@@ -11,11 +12,14 @@ const variantFilter = process.env.OLI_BENCH_VARIANT
 const runTimeout = Number(process.env.OLI_BENCH_TIMEOUT_MS ?? 120_000)
 const output = process.env.OLI_BENCH_OUTPUT ?? path.join(os.tmpdir(), "olibench-core.json")
 
-const fixture = path.resolve(import.meta.dir, "../test/fixture/harness-benchmark")
+const fixture = process.env.OLI_BENCH_FIXTURE
+  ? path.resolve(process.env.OLI_BENCH_FIXTURE)
+  : path.resolve(import.meta.dir, "../test/fixture/harness-benchmark")
 const tasks = JSON.parse(readFileSync(path.join(fixture, "tasks.json"), "utf8")) as Array<{
   id: string
   prompt: string
   check: string
+  requiredBrowserActions?: string[]
 }>
 
 async function command(args: string[], cwd: string, env: Record<string, string> = {}, timeout?: number) {
@@ -41,6 +45,33 @@ async function command(args: string[], cwd: string, env: Record<string, string> 
   ])
   if (timer) clearTimeout(timer)
   return { stdout, stderr, exitCode, timedOut, milliseconds: performance.now() - started }
+}
+
+async function capture(directory: string, task: string, variant: string, trial: number) {
+  if (!existsSync(path.join(directory, "index.html"))) return { screenshots: [] as string[], consoleErrors: [] as string[] }
+  const { chromium } = await import("playwright")
+  const browser = await chromium.launch({ channel: "chrome", headless: true }).catch(() => chromium.launch({ headless: true }))
+  const page = await browser.newPage()
+  const consoleErrors: string[] = []
+  page.on("console", (message) => {
+    if (message.type() === "error") consoleErrors.push(message.text())
+  })
+  page.on("pageerror", (error) => consoleErrors.push(error.message))
+  const artifactDirectory = output.replace(/\.json$/i, "-artifacts")
+  mkdirSync(artifactDirectory, { recursive: true })
+  const screenshots = []
+  await page.goto(pathToFileURL(path.join(directory, "index.html")).href)
+  for (const viewport of [
+    { name: "wide", width: 1440, height: 1000 },
+    { name: "narrow", width: 390, height: 844 },
+  ]) {
+    await page.setViewportSize(viewport)
+    const target = path.join(artifactDirectory, `${task}-${variant}-${trial}-${viewport.name}.png`)
+    await page.screenshot({ path: target, fullPage: true })
+    screenshots.push(target)
+  }
+  await browser.close()
+  return { screenshots, consoleErrors }
 }
 
 function metrics(output: string) {
@@ -89,6 +120,10 @@ function metrics(output: string) {
     modelTurns: steps.size,
     toolCalls: completed.length,
     tools: completed.map((item) => item.tool).filter((item): item is string => typeof item === "string"),
+    browserActions: completed
+      .filter((item) => item.tool === "browser")
+      .map((item) => (item.state as Record<string, Record<string, unknown>>).input?.action)
+      .filter((item): item is string => typeof item === "string"),
     skillsLoaded: completed.filter((item) => item.tool === "skill").length,
     filesRead: new Set(
       completed
@@ -124,6 +159,9 @@ const results: Array<
     filesChanged: number
     additions: number
     deletions: number
+    screenshots: string[]
+    consoleErrors: string[]
+    requiredEvidencePassed: boolean
     error?: string
   }
 > = []
@@ -163,19 +201,27 @@ for (const task of tasks) {
         const verification = await command(["bun", "test"], directory)
         const acceptance = await command(["bun", "-e", task.check], directory)
         const diff = await command(["git", "diff", "--numstat"], directory)
+        const visual = await capture(directory, task.id, variant, trial)
         const changed = diff.stdout.trim().split("\n").filter(Boolean)
+        const observed = metrics(run.stdout)
+        const requiredEvidencePassed = (task.requiredBrowserActions ?? []).every((action) =>
+          observed.browserActions.includes(action),
+        )
         results.push({
           task: task.id,
           variant,
           trial,
           model,
-          success: run.exitCode === 0 && verification.exitCode === 0 && acceptance.exitCode === 0,
+          success:
+            run.exitCode === 0 && verification.exitCode === 0 && acceptance.exitCode === 0 && requiredEvidencePassed,
           timedOut: run.timedOut,
           wallMilliseconds: Math.round(run.milliseconds),
-          ...metrics(run.stdout),
+          ...observed,
+          requiredEvidencePassed,
           filesChanged: changed.length,
           additions: changed.reduce((total, line) => total + Number(line.split("\t")[0] || 0), 0),
           deletions: changed.reduce((total, line) => total + Number(line.split("\t")[1] || 0), 0),
+          ...visual,
           error: run.exitCode === 0 ? undefined : run.stderr.trim().slice(-1000),
         })
         await Bun.write(output, JSON.stringify({ model, runs, trials: results }, null, 2))
