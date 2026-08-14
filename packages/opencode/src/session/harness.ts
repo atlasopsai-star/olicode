@@ -303,7 +303,7 @@ export function render(input: { agent: Agent.Info; query: string; taskID?: strin
     "Use the smallest correct implementation. Reuse existing code, platform behavior, standard library, and installed dependencies before adding code or dependencies.",
     "Every substantial action must materially help the task contract. Do not perform drive-by cleanup, unrelated formatting, or speculative work.",
     active.rigor === "FAST"
-      ? "Inspect the target, make the surgical edit, verify narrowly, and stop."
+      ? "Use an explicitly named path without rediscovering it. Inspect once, make the surgical edit, then use one cheapest sufficient check (a direct reread is enough for a literal edit) and stop."
       : "Run the cheapest sufficient validation. Changed-file scope is enforced automatically at completion; do not spend a tool call rechecking it.",
     input.agent.name === "plan" ? "Plan precisely. Do not implement code in this mode." : undefined,
     "Final response style: tight. State outcome, changed files, verification, and unresolved issues only.",

@@ -90,17 +90,25 @@ async function capture(directory: string, task: string, variant: string, trial: 
   return { screenshots, consoleErrors }
 }
 
-function metrics(output: string) {
-  const events = output
-    .split("\n")
-    .filter(Boolean)
-    .flatMap((line) => {
-      try {
-        return [JSON.parse(line) as unknown]
-      } catch {
-        return []
-      }
-    })
+function parseEvents(output: string) {
+  try {
+    return [JSON.parse(output) as unknown]
+  } catch {
+    return output
+      .split("\n")
+      .filter(Boolean)
+      .flatMap((line) => {
+        try {
+          return [JSON.parse(line) as unknown]
+        } catch {
+          return []
+        }
+      })
+  }
+}
+
+function metrics(...outputs: string[]) {
+  const events = outputs.flatMap(parseEvents)
   const tools = new Map<string, Record<string, unknown>>()
   const steps = new Map<string, Record<string, unknown>>()
   const harness: Array<Record<string, unknown>> = []
@@ -177,7 +185,8 @@ function metrics(output: string) {
     failedCommands: completed.filter(
       (item) => item.tool === "shell" && (item.state as Record<string, Record<string, unknown>>).metadata?.exit !== 0,
     ).length,
-    retries:
+    retries: number(persistedTelemetry?.retries),
+    proofCorrections:
       harness.filter((item) => item.kind === "proof").length > 1
         ? harness.filter((item) => item.kind === "proof").length - 1
         : 0,
@@ -248,12 +257,18 @@ for (const task of tasks) {
           { OLICODE_HARNESS: variant === "olicode" ? "1" : "0" },
           runTimeout,
         )
+        const sessionID = parseEvents(run.stdout)
+          .map((event) => (event && typeof event === "object" ? (event as Record<string, unknown>).sessionID : undefined))
+          .find((item): item is string => typeof item === "string")
+        const exported = sessionID
+          ? await command(["bun", "run", "src/index.ts", "export", sessionID], path.resolve(import.meta.dir, ".."))
+          : undefined
         const verification = await command(["bun", "test"], directory)
         const acceptance = await command(["bun", "-e", task.check], directory)
         const diff = await command(["git", "diff", "--numstat"], directory)
         const visual = await capture(directory, task.id, variant, trial)
         const changed = diff.stdout.trim().split("\n").filter(Boolean)
-        const observed = metrics(run.stdout)
+        const observed = metrics(run.stdout, exported?.stdout ?? "")
         const requiredEvidencePassed =
           (task.requiredBrowserActions ?? []).every((action) => observed.browserActions.includes(action)) &&
           // shipAttempted (not shipActions) on purpose: non-interactive bench
