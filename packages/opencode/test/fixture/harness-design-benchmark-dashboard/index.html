@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pulse</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 0; color: #222; }
+      .layout { display: flex; }
+      nav { width: 200px; padding: 16px; }
+      main { flex: 1; padding: 16px; }
+      .stat { border: 1px solid #ddd; padding: 16px; margin-bottom: 12px; }
+      table { width: 100%; border-collapse: collapse; }
+      td, th { border: 1px solid #ddd; padding: 8px; text-align: left; }
+    </style>
+  </head>
+  <body>
+    <div class="layout">
+      <nav>
+        <strong>Pulse</strong>
+        <ul>
+          <li>Overview</li>
+          <li>Deployments</li>
+          <li>Usage</li>
+          <li>Settings</li>
+        </ul>
+      </nav>
+      <main>
+        <h1>Overview</h1>
+        <div class="stat">Active projects: 4</div>
+        <div class="stat">Requests today: 128,204</div>
+        <div class="stat">Error rate: 0.4%</div>
+        <table>
+          <tr><th>Project</th><th>Status</th><th>Last deploy</th></tr>
+          <tr><td>api-gateway</td><td>Healthy</td><td>2h ago</td></tr>
+          <tr><td>web-app</td><td>Healthy</td><td>5h ago</td></tr>
+          <tr><td>worker-queue</td><td>Degraded</td><td>1d ago</td></tr>
+        </table>
+      </main>
+    </div>
+  </body>
+</html>

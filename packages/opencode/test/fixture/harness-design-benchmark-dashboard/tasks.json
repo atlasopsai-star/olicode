@@ -1,0 +1,8 @@
+[
+  {
+    "id": "developer-dashboard",
+    "prompt": "Redesign index.html into a polished developer/product dashboard for Pulse, an infrastructure monitoring tool used by engineers throughout the workday. Establish clear visual hierarchy between the sidebar navigation, key stat cards, and the deployments table; use intentional information density appropriate for a data-heavy tool (not a marketing page); and make it responsive so the layout holds up in a narrow viewport. Preserve the existing navigation items, stats, and table data. Use only local HTML/CSS/JS with no dependencies or external assets. Run the build and tests, render the result in the browser, inspect the console, and capture both wide and narrow screenshots before finishing.",
+    "check": "const page = await Bun.file('index.html').text(); if (!page.includes('Pulse') || !page.includes('api-gateway') || !page.includes('Overview') || page.length < 3000) process.exit(1)",
+    "requiredBrowserActions": ["navigate", "viewport", "screenshot", "console"]
+  }
+]

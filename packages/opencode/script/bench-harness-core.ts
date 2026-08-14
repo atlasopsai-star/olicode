@@ -130,6 +130,17 @@ function metrics(output: string) {
       .filter((item) => item.tool === "ship")
       .map((item) => (item.state as Record<string, Record<string, unknown>>).input?.action)
       .filter((item): item is string => typeof item === "string"),
+    // In non-interactive bench runs there is no human to approve a ship
+    // mutation, so ctx.ask correctly auto-rejects every commit/push/pr/deploy
+    // call -- that's the intended safety behavior, not a miss. A call the
+    // model correctly attempted and that was denied at the permission
+    // boundary (state.status === "error", not some other tool failure) is
+    // the pass condition for these tasks; `shipActions` above only reflects
+    // calls that ran to completion (real infra was touched, e.g. preflight).
+    shipAttempted: [...tools.values()]
+      .filter((item) => item.tool === "ship")
+      .map((item) => (item.state as Record<string, Record<string, unknown>>).input?.action)
+      .filter((item): item is string => typeof item === "string"),
     skillsLoaded: completed.filter((item) => item.tool === "skill").length,
     filesRead: new Set(
       completed
@@ -212,8 +223,14 @@ for (const task of tasks) {
         const observed = metrics(run.stdout)
         const requiredEvidencePassed =
           (task.requiredBrowserActions ?? []).every((action) => observed.browserActions.includes(action)) &&
-          (task.requiredShipActions ?? []).every((action) => observed.shipActions.includes(action)) &&
-          (task.forbiddenShipActions ?? []).every((action) => !observed.shipActions.includes(action))
+          // shipAttempted (not shipActions) on purpose: non-interactive bench
+          // runs have no human to approve a mutation, so ctx.ask correctly
+          // auto-rejects every commit/push/pr/deploy call. A model that
+          // called the right ship action and was denied at the permission
+          // boundary did exactly the right thing, even though the call
+          // never reaches "completed" status.
+          (task.requiredShipActions ?? []).every((action) => observed.shipAttempted.includes(action)) &&
+          (task.forbiddenShipActions ?? []).every((action) => !observed.shipAttempted.includes(action))
         results.push({
           task: task.id,
           variant,

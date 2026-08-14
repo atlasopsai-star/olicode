@@ -4,5 +4,11 @@
     "prompt": "Redesign index.html into a complete premium, distinctive homepage for Northline, a high-end residential climate and air-quality company serving design-conscious homeowners. Include a hero, differentiated services, an approach/trust section, a usable booking form, and a footer. Preserve the Book an assessment action and use only local HTML/CSS/JS with no dependencies or external assets. Avoid a generic AI SaaS template and do not use viewport-scale empty space as a substitute for content. Run the build and tests, render the result in the browser, inspect the console, and capture both wide and narrow screenshots before finishing.",
     "check": "const page = await Bun.file('index.html').text(); if (!page.includes('Northline') || !page.includes('Book an assessment') || !page.includes('<form') || (page.match(/<section/g) ?? []).length < 4 || page.length < 3500) process.exit(1)",
     "requiredBrowserActions": ["navigate", "viewport", "screenshot", "console"]
+  },
+  {
+    "id": "generic-ai-redesign",
+    "prompt": "This index.html for Northline looks like generic templated AI output -- the purple-to-blue gradient hero, the plain three-card grid, and the boilerplate copy could belong to any company. Preserve the Book an assessment action and existing structure and content intent, but materially improve the visual identity so it reads as a considered, specific brand rather than a generic template: distinctive typography, a real color system instead of a stock gradient, intentional spacing/rhythm, and copy that feels specific to a premium home-climate company. Use only local HTML/CSS/JS with no dependencies or external assets. Run the build and tests, render the result in the browser, inspect the console, and capture both wide and narrow screenshots before finishing.",
+    "check": "const page = await Bun.file('index.html').text(); if (!page.includes('Northline') || !page.includes('Book an assessment') || page.length < 3000) process.exit(1)",
+    "requiredBrowserActions": ["navigate", "viewport", "screenshot", "console"]
   }
 ]
