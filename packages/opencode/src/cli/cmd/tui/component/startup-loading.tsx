@@ -3,6 +3,8 @@ import { useTheme } from "../context/theme"
 import { Spinner } from "./spinner"
 import { OliCodeWordmark } from "./olicode-brand"
 
+const MINIMUM_DISPLAY_MS = 1000
+
 export function StartupLoading(props: { ready: () => boolean }) {
   const theme = useTheme().theme
   const [show, setShow] = createSignal(true)
@@ -15,7 +17,7 @@ export function StartupLoading(props: { ready: () => boolean }) {
       if (!show()) return
       if (hold) return
 
-      const left = 3000 - (Date.now() - stamp)
+      const left = MINIMUM_DISPLAY_MS - (Date.now() - stamp)
       if (left <= 0) {
         setShow(false)
         return
@@ -40,19 +42,27 @@ export function StartupLoading(props: { ready: () => boolean }) {
 
   return (
     <Show when={show()}>
-      <box position="absolute" zIndex={5000} left={0} right={0} bottom={1} justifyContent="center" alignItems="center">
+      <box
+        position="absolute"
+        zIndex={5000}
+        top={0}
+        bottom={0}
+        left={0}
+        right={0}
+        backgroundColor={theme.background}
+        justifyContent="center"
+        alignItems="center"
+      >
         <box
-          backgroundColor={theme.backgroundPanel}
-          border={["top", "bottom"]}
-          borderColor={theme.borderSubtle}
           paddingLeft={2}
           paddingRight={2}
-          paddingTop={1}
-          paddingBottom={1}
           alignItems="center"
           gap={1}
         >
           <OliCodeWordmark variant="hero" />
+          <text fg={theme.primary} wrapMode="none">
+            <b>PREMIUM AI CODING COMMAND CENTER</b>
+          </text>
           <Spinner color={theme.primary}>{text()}</Spinner>
         </box>
       </box>
