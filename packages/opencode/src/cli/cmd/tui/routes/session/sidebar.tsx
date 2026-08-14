@@ -8,6 +8,7 @@ import { TuiPluginRuntime } from "@/cli/cmd/tui/plugin/runtime"
 
 import { getScrollAcceleration } from "../../util/scroll"
 import { WorkspaceLabel } from "../../component/workspace-label"
+import { OliCodeSectionTitle, OliCodeWordmark } from "../../component/olicode-brand"
 
 export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const project = useProject()
@@ -32,6 +33,8 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
         paddingBottom={1}
         paddingLeft={2}
         paddingRight={2}
+        border={["left"]}
+        borderColor={theme.borderSubtle}
         position={props.overlay ? "absolute" : "relative"}
       >
         <scrollbox
@@ -53,6 +56,8 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
               share_url={session()!.share?.url}
             >
               <box paddingRight={1}>
+                <OliCodeSectionTitle>SESSION CONTEXT</OliCodeSectionTitle>
+                <box height={1} />
                 <text fg={theme.text}>
                   <b>{session()!.title}</b>
                 </text>
@@ -87,13 +92,10 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
 
         <box flexShrink={0} gap={1} paddingTop={1}>
           <TuiPluginRuntime.Slot name="sidebar_footer" mode="single_winner" session_id={props.sessionID}>
-            <text fg={theme.textMuted}>
-              <span style={{ fg: theme.success }}>•</span> <b>Open</b>
-              <span style={{ fg: theme.text }}>
-                <b>Code</b>
-              </span>{" "}
-              <span>{InstallationVersion}</span>
-            </text>
+            <box flexDirection="row" gap={1}>
+              <OliCodeWordmark compact muted />
+              <text fg={theme.textMuted}>{InstallationVersion}</text>
+            </box>
           </TuiPluginRuntime.Slot>
         </box>
       </box>

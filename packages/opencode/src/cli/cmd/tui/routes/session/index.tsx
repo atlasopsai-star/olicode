@@ -92,6 +92,7 @@ import { SessionRetry } from "@/session/retry"
 import { getRevertDiffFiles } from "../../util/revert-diff"
 import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut, useOpencodeKeymap } from "../../keymap"
 import { PathFormatterProvider, usePathFormatter } from "../../context/path-format"
+import { OliCodeWordmark } from "../../component/olicode-brand"
 
 addDefaultParsers(parsers.parsers)
 
@@ -181,6 +182,7 @@ function SessionStatsBar(props: { sessionID: string }) {
   const { theme } = useTheme()
   const sync = useSync()
   const local = useLocal()
+  const dimensions = useTerminalDimensions()
 
   const [elapsed, setElapsed] = createSignal("00:00:00")
   const session = createMemo(() => sync.session.get(props.sessionID))
@@ -202,7 +204,7 @@ function SessionStatsBar(props: { sessionID: string }) {
 
   const modelName = createMemo(() => {
     const m = local.model.current()
-    if (!m) return "AI Model"
+    if (!m) return "No model"
     return m.modelID.split("/").pop() ?? m.modelID
   })
 
@@ -214,6 +216,13 @@ function SessionStatsBar(props: { sessionID: string }) {
   })
 
   const msgCount = createMemo(() => (sync.data.message[props.sessionID] ?? []).length)
+  const state = createMemo(() => {
+    if (!sync.ready) return { label: "SYNCING", color: theme.warning, mark: "○" }
+    const status = sync.data.session_status?.[props.sessionID]
+    if (status && status.type !== "idle")
+      return { label: "WORKING", color: theme.primary, mark: "◆" }
+    return { label: "READY", color: theme.success, mark: "●" }
+  })
 
   return (
     <box
@@ -226,18 +235,19 @@ function SessionStatsBar(props: { sessionID: string }) {
       gap={2}
       backgroundColor={theme.backgroundPanel}
       alignItems="center"
+      border={["bottom"]}
+      borderColor={theme.borderSubtle}
     >
-      <box flexDirection="row" gap={1} alignItems="center">
-        <text fg={theme.success}>◆</text>
-        <text fg={theme.textMuted}>OLI</text>
-      </box>
+      <OliCodeWordmark compact />
       <text fg={theme.border}>│</text>
       <box flexDirection="row" gap={1} alignItems="center">
         <text fg={theme.textMuted}>MODEL</text>
         <text fg={theme.primary}>{modelName()}</text>
       </box>
-      <text fg={theme.border}>│</text>
-      <Show when={tokens()}>
+      <Show when={dimensions().width >= 92}>
+        <text fg={theme.border}>│</text>
+      </Show>
+      <Show when={tokens() && dimensions().width >= 92}>
         <box flexDirection="row" gap={1} alignItems="center">
           <text fg={theme.textMuted}>IN</text>
           <text fg={theme.info}>{(tokens()!.input / 1000).toFixed(1)}k</text>
@@ -246,18 +256,20 @@ function SessionStatsBar(props: { sessionID: string }) {
         </box>
         <text fg={theme.border}>│</text>
       </Show>
-      <box flexDirection="row" gap={1} alignItems="center">
-        <text fg={theme.textMuted}>SESSION</text>
-        <text fg={theme.text}>{elapsed()}</text>
-        <text fg={theme.textMuted}>·</text>
-        <text fg={theme.text}>{msgCount()}</text>
-        <text fg={theme.textMuted}>msgs</text>
-      </box>
+      <Show when={dimensions().width >= 116}>
+        <box flexDirection="row" gap={1} alignItems="center">
+          <text fg={theme.textMuted}>SESSION</text>
+          <text fg={theme.text}>{elapsed()}</text>
+          <text fg={theme.textMuted}>·</text>
+          <text fg={theme.text}>{msgCount()}</text>
+          <text fg={theme.textMuted}>msgs</text>
+        </box>
+      </Show>
       <box flexGrow={1} />
       <box flexDirection="row" gap={1} alignItems="center">
-        <text fg={theme.success}>◆</text>
-        <text fg={theme.primary}>
-          <b>OLICODE IS READY</b>
+        <text fg={state().color}>{state().mark}</text>
+        <text fg={state().color}>
+          <b>{state().label}</b>
         </text>
       </box>
     </box>
@@ -317,7 +329,7 @@ export function Session() {
   const [showGenericToolOutput, setShowGenericToolOutput] = kv.signal("generic_tool_output_visibility", false)
 
   const wide = createMemo(() => dimensions().width > 130)
-  const leftSidebarVisible = createMemo(() => dimensions().width > 110)
+  const leftSidebarVisible = createMemo(() => dimensions().width > 138)
   const sidebarVisible = createMemo(() => {
     if (session()?.parentID) return false
     if (sidebarOpen()) return true

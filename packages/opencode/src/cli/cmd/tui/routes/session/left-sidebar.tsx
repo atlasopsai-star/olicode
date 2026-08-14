@@ -4,12 +4,14 @@ import { useTheme } from "../../context/theme"
 import { useProject } from "@tui/context/project"
 import { useSync } from "@tui/context/sync"
 import { useGamification } from "../../context/gamification"
+import { OliCodeSectionTitle, OliCodeWordmark } from "../../component/olicode-brand"
+import { useCommandShortcut } from "../../keymap"
 
 function getGitBranch(): string {
   try {
-    return execSync("git branch --show-current 2>/dev/null", { encoding: "utf8", timeout: 2000 }).trim() || "main"
+    return execSync("git branch --show-current 2>/dev/null", { encoding: "utf8", timeout: 2000 }).trim()
   } catch {
-    return "main"
+    return ""
   }
 }
 
@@ -63,31 +65,24 @@ function Divider(props: { label?: string }) {
   )
 }
 
-const COMMANDS = [
-  { key: "n", label: "New Chat" },
-  { key: "r", label: "Run Command" },
-  { key: "o", label: "Open File" },
-  { key: "s", label: "Search Code" },
-  { key: "m", label: "Change Model" },
-  { key: ",", label: "Settings" },
-  { key: "?", label: "Help" },
-  { key: "q", label: "Quit" },
-]
-
 function CommandCenter() {
   const { theme } = useTheme()
+  const commands = [
+    { key: useCommandShortcut("session.new"), label: "New session" },
+    { key: useCommandShortcut("command.palette.show"), label: "Commands" },
+    { key: useCommandShortcut("model.list"), label: "Models" },
+    { key: useCommandShortcut("session.list"), label: "Sessions" },
+    { key: useCommandShortcut("help.show"), label: "Help" },
+  ]
   return (
     <box gap={0}>
-      <box flexDirection="row" gap={1} alignItems="center" marginBottom={1}>
-        <text fg={theme.primary}>◈</text>
-        <text fg={theme.text}>
-          <b>COMMAND CENTER</b>
-        </text>
+      <box marginBottom={1}>
+        <OliCodeSectionTitle>COMMANDS</OliCodeSectionTitle>
       </box>
-      {COMMANDS.map((cmd) => (
+      {commands.map((cmd) => (
         <box flexDirection="row" justifyContent="space-between" paddingLeft={1}>
-          <text fg={theme.textMuted}>{">> "}{cmd.label}</text>
-          <text fg={theme.primary}>[{cmd.key}]</text>
+          <text fg={theme.textMuted}>{cmd.label}</text>
+          <text fg={theme.primary}>{cmd.key()}</text>
         </box>
       ))}
     </box>
@@ -122,33 +117,34 @@ function ProjectOverview(props: { sessionID: string }) {
       if (pkg.dependencies?.vue || pkg.devDependencies?.vue) return "Vue"
       if (pkg.dependencies?.svelte || pkg.devDependencies?.svelte) return "Svelte"
       if (pkg.dependencies?.express || pkg.devDependencies?.express) return "Express"
-      return "Node.js"
+      return pkg.name ? "Node.js" : ""
     } catch {
-      return "TypeScript"
+      return ""
     }
   })
 
   return (
     <box gap={0}>
-      <box flexDirection="row" gap={1} alignItems="center" marginBottom={1}>
-        <text fg={theme.secondary}>⬡</text>
-        <text fg={theme.text}>
-          <b>PROJECT OVERVIEW</b>
-        </text>
+      <box marginBottom={1}>
+        <OliCodeSectionTitle tone="secondary">PROJECT</OliCodeSectionTitle>
       </box>
       <box paddingLeft={1} gap={0}>
         <box flexDirection="row" justifyContent="space-between">
           <text fg={theme.textMuted}>Project:</text>
           <text fg={theme.text}>{cwd()}</text>
         </box>
-        <box flexDirection="row" justifyContent="space-between">
-          <text fg={theme.textMuted}>Framework:</text>
-          <text fg={theme.info}>{framework()}</text>
-        </box>
-        <box flexDirection="row" justifyContent="space-between">
-          <text fg={theme.textMuted}>Branch:</text>
-          <text fg={theme.success}>⎇ {branch()}</text>
-        </box>
+        <Show when={framework()}>
+          <box flexDirection="row" justifyContent="space-between">
+            <text fg={theme.textMuted}>Stack:</text>
+            <text fg={theme.info}>{framework()}</text>
+          </box>
+        </Show>
+        <Show when={branch()}>
+          <box flexDirection="row" justifyContent="space-between">
+            <text fg={theme.textMuted}>Branch:</text>
+            <text fg={theme.success}>⎇ {branch()}</text>
+          </box>
+        </Show>
         <Show when={gitStatus()}>
           <box flexDirection="row" justifyContent="space-between">
             <text fg={theme.textMuted}>Git:</text>
@@ -172,22 +168,10 @@ function GamificationPanel() {
   const barWidth = WIDTH - 8
   const xpBar = createMemo(() => bar(pct(), barWidth))
 
-  const motivational = createMemo(() => {
-    const lvl = gami.level()
-    if (lvl >= 20) return "You're legendary! 🔥"
-    if (lvl >= 15) return "Elite coder status!"
-    if (lvl >= 10) return "Keep coding, legend!"
-    if (lvl >= 5) return "On a roll!"
-    return "Keep it up! 💪"
-  })
-
   return (
     <box gap={0}>
-      <box flexDirection="row" gap={1} alignItems="center" marginBottom={1}>
-        <text fg={theme.warning}>★</text>
-        <text fg={theme.text}>
-          <b>GAMIFICATION</b>
-        </text>
+      <box marginBottom={1}>
+        <OliCodeSectionTitle>PROGRESS</OliCodeSectionTitle>
       </box>
       <box paddingLeft={1} gap={0}>
         <box flexDirection="row" justifyContent="space-between">
@@ -226,8 +210,6 @@ function GamificationPanel() {
             <b>{gami.data().xp.toLocaleString()}</b>
           </text>
         </box>
-        <box height={1} />
-        <text fg={theme.primary}>{motivational()}</text>
       </box>
     </box>
   )
@@ -246,9 +228,13 @@ export function LeftSidebar(props: { sessionID: string }) {
       paddingLeft={1}
       paddingRight={1}
       flexShrink={0}
+      border={["right"]}
+      borderColor={theme.borderSubtle}
     >
       <scrollbox flexGrow={1}>
         <box flexShrink={0} gap={1} paddingRight={1}>
+          <OliCodeWordmark />
+          <Divider />
           <CommandCenter />
           <Divider />
           <ProjectOverview sessionID={props.sessionID} />

@@ -1,5 +1,5 @@
 import { Prompt, type PromptRef } from "@tui/component/prompt"
-import { createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js"
+import { createEffect, createMemo, createSignal, onCleanup, onMount, Show } from "solid-js"
 import { Logo } from "../component/logo"
 import { useTheme } from "../context/theme"
 import { useSync } from "../context/sync"
@@ -45,7 +45,7 @@ function Clock() {
   )
 }
 
-function StatusBar() {
+function StatusBar(props: { ready: boolean; width: number }) {
   const { theme } = useTheme()
   const workspace = createMemo(() => {
     const cwd = process.cwd()
@@ -53,23 +53,20 @@ function StatusBar() {
     return cwd.replace(home, "~")
   })
   return (
-    <box flexDirection="row" gap={3} alignItems="center" justifyContent="center" paddingTop={1} paddingBottom={1}>
+    <box flexDirection="row" gap={2} alignItems="center" justifyContent="center" paddingTop={1} paddingBottom={1}>
       <box flexDirection="row" gap={1} alignItems="center">
-        <text fg={theme.success}>◆</text>
-        <text fg={theme.textMuted}>ONLINE</text>
+        <text fg={props.ready ? theme.success : theme.warning}>{props.ready ? "●" : "○"}</text>
+        <text fg={theme.textMuted}>{props.ready ? "READY" : "CONNECTING"}</text>
       </box>
       <text fg={theme.border}>│</text>
       <Clock />
-      <text fg={theme.border}>│</text>
-      <box flexDirection="row" gap={1} alignItems="center">
-        <text fg={theme.primary}>75+</text>
-        <text fg={theme.textMuted}>AI Models</text>
-      </box>
-      <text fg={theme.border}>│</text>
-      <box flexDirection="row" gap={1} alignItems="center">
-        <text fg={theme.secondary}>⬡</text>
-        <text fg={theme.textMuted}>{workspace()}</text>
-      </box>
+      <Show when={props.width >= 86}>
+        <text fg={theme.border}>│</text>
+        <box flexDirection="row" gap={1} alignItems="center">
+          <text fg={theme.primary}>⌁</text>
+          <text fg={theme.textMuted}>{workspace()}</text>
+        </box>
+      </Show>
     </box>
   )
 }
@@ -139,13 +136,13 @@ export function Home() {
             </text>
           </box>
           <box alignItems="center">
-            <text fg={theme.textMuted}>Multi-model · Terminal-native · Built to ship</text>
+            <text fg={theme.textMuted}>AI coding, design, and shipping workspace</text>
           </box>
         </box>
 
         {/* Live status bar */}
         <box flexShrink={0} alignItems="center" width="100%">
-          <StatusBar />
+          <StatusBar ready={sync.ready} width={dimensions().width} />
         </box>
 
         {/* Separator */}
@@ -168,18 +165,20 @@ export function Home() {
             <span style={{ fg: theme.textMuted }}> /models</span>
             <span style={{ fg: theme.border }}> switch</span>
           </text>
-          <text fg={theme.borderActive}>·</text>
-          <text>
-            <span style={{ fg: theme.primary }}>⌘</span>
-            <span style={{ fg: theme.textMuted }}> /connect</span>
-            <span style={{ fg: theme.border }}> providers</span>
-          </text>
-          <text fg={theme.borderActive}>·</text>
-          <text>
-            <span style={{ fg: theme.primary }}>⌘</span>
-            <span style={{ fg: theme.textMuted }}> /themes</span>
-            <span style={{ fg: theme.border }}> style</span>
-          </text>
+          <Show when={dimensions().width >= 96}>
+            <text fg={theme.borderActive}>·</text>
+            <text>
+              <span style={{ fg: theme.primary }}>⌘</span>
+              <span style={{ fg: theme.textMuted }}> /connect</span>
+              <span style={{ fg: theme.border }}> providers</span>
+            </text>
+            <text fg={theme.borderActive}>·</text>
+            <text>
+              <span style={{ fg: theme.primary }}>⌘</span>
+              <span style={{ fg: theme.textMuted }}> /themes</span>
+              <span style={{ fg: theme.border }}> style</span>
+            </text>
+          </Show>
         </box>
 
         {/* Prompt */}
