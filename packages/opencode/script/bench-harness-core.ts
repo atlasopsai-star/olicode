@@ -294,6 +294,7 @@ for (const task of tasks) {
         const visual = await capture(directory, task.id, variant, trial)
         const changed = diff.stdout.trim().split("\n").filter(Boolean)
         const observed = metrics(run.stdout, exported?.stdout ?? "")
+        const telemetryCaptured = variant === "stock" || exported?.exitCode === 0
         const requiredEvidencePassed =
           (task.requiredBrowserActions ?? []).every((action) => observed.browserActions.includes(action)) &&
           // shipAttempted (not shipActions) on purpose: non-interactive bench
@@ -315,7 +316,8 @@ for (const task of tasks) {
             acceptance.exitCode === 0 &&
             requiredEvidencePassed &&
             observed.scopeViolations === 0 &&
-            observed.unsupportedCompletionClaims === 0,
+            observed.unsupportedCompletionClaims === 0 &&
+            telemetryCaptured,
           timedOut: run.timedOut,
           wallMilliseconds: Math.round(run.milliseconds),
           ...observed,
@@ -324,7 +326,7 @@ for (const task of tasks) {
           additions: changed.reduce((total, line) => total + Number(line.split("\t")[0] || 0), 0),
           deletions: changed.reduce((total, line) => total + Number(line.split("\t")[1] || 0), 0),
           ...visual,
-          telemetryCaptured: variant === "stock" || exported?.exitCode === 0,
+          telemetryCaptured,
           benchmarkOverhead: {
             exportMilliseconds: Math.round(exported?.milliseconds ?? 0),
             verificationMilliseconds: Math.round(verification.milliseconds),

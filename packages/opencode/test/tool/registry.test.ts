@@ -122,7 +122,9 @@ describe("tool.registry", () => {
 
     expect(execution.mode).toBe("change")
     expect(execution.rigor).toBe("STANDARD")
-    expect(visibleForExecution("todowrite", execution)).toBe(false)
+    for (const tool of ["todowrite", "task", "webfetch", "websearch", "skill"])
+      expect(visibleForExecution(tool, execution)).toBe(false)
+    expect(visibleForExecution("bash", execution)).toBe(true)
   })
 
   test("uses real tool IDs when shrinking the fast action surface", () => {
