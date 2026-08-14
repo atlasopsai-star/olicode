@@ -34,6 +34,41 @@ function tool(tool: string, input: Record<string, unknown>, metadata: Record<str
   } as MessageV2.WithParts
 }
 
+// Mirrors the shape a permission-denied tool call actually has (observed
+// live: ship(commit) and a screenshot-deleting `rm` both denied this way) --
+// status "error", no metadata at all, not the "completed" shape `tool()` produces.
+function deniedTool(name: string, input: Record<string, unknown>) {
+  sequence++
+  const sessionID = SessionID.make("session-core")
+  const messageID = MessageID.make(`msg-core-${sequence}`)
+  return {
+    info: {
+      id: messageID,
+      sessionID,
+      role: "user",
+      time: { created: sequence },
+      agent: "build",
+      model: { providerID: ProviderID.make("test"), modelID: ModelID.make("test") },
+    },
+    parts: [
+      {
+        id: PartID.make(`prt-core-${sequence}`),
+        messageID,
+        sessionID,
+        type: "tool",
+        callID: `call-core-${sequence}`,
+        tool: name,
+        state: {
+          status: "error",
+          input,
+          error: "The user rejected permission to use this specific tool call.",
+          time: { start: 0, end: 1 },
+        },
+      },
+    ],
+  } as MessageV2.WithParts
+}
+
 describe("harness core", () => {
   test("proof gate stops after change, validation, and clean scope evidence", () => {
     const filePath = "/repo/src/button.ts"
@@ -136,6 +171,32 @@ describe("harness core", () => {
     ).toBe(true)
   })
 
+  // Live-caught regression: after gathering full design evidence, the model
+  // tried to delete its own screenshots (apply_patch delete + bash rm), both
+  // correctly denied by the permission gate. Confirm a denied delete attempt
+  // sitting in history neither corrupts evidence tracking nor blocks
+  // completion -- the harness's job is to make deleting evidence pointless,
+  // not to crash or misreport when a model tries anyway.
+  test("a denied attempt to delete required screenshots does not break proof or block completion", () => {
+    const filePath = "/repo/src/page.tsx"
+    const contract = SessionHarness.contract("Redesign the landing page UI in src/page.tsx")
+    const complete = [
+      tool("read", { filePath }),
+      tool("edit", { filePath }, { filediff: { file: filePath, additions: 4, deletions: 2 } }),
+      tool("shell", { command: "bun run build" }, { exit: 0 }),
+      tool("browser", { action: "navigate", url: "http://localhost:3000" }),
+      tool("browser", { action: "screenshot" }),
+      tool("browser", { action: "viewport", width: 390, height: 844 }),
+      tool("browser", { action: "screenshot" }),
+      tool("browser", { action: "console" }),
+      deniedTool("apply_patch", { patchText: "*** Delete File: wide.png" }),
+      deniedTool("bash", { command: "rm wide.png narrow.png" }),
+    ]
+    const result = HarnessCore.proof(complete, contract)
+    expect(result.missing).toEqual([])
+    expect(result.stop).toBe(true)
+  })
+
   test("SHIP records deterministic shipping and deployed browser proof", () => {
     const filePath = "/repo/src/page.tsx"
     const result = HarnessCore.proof(
@@ -205,6 +266,7 @@ describe("harness core", () => {
       systemPromptChars: 100,
       toolSurfaceChars: 200,
       modelMessages: 3,
+      exposedTools: ["read", "apply_patch"],
     }
     const result = HarnessCore.telemetry(
       [tool("read", { filePath: "/repo/active.ts" }), tool("shell", { command: "bun test" }, { exit: 0 })],

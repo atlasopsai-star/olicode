@@ -35,7 +35,7 @@ describe("Design.contract", () => {
     expect(active.brief.productType).toBe("local service homepage")
     expect(active.audience).toBe("design-conscious homeowners")
     expect(active.layoutDirection).toContain("editorial, asymmetrical")
-    expect(active.typographyDirection).toContain("editorial display")
+    expect(active.typographyDirection).toContain("distinctive display face")
     expect(active.variance).toBe("high")
   })
 })
