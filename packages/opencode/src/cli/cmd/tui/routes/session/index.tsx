@@ -92,7 +92,7 @@ import { SessionRetry } from "@/session/retry"
 import { getRevertDiffFiles } from "../../util/revert-diff"
 import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut, useOpencodeKeymap } from "../../keymap"
 import { PathFormatterProvider, usePathFormatter } from "../../context/path-format"
-import { OliCodeWordmark } from "../../component/olicode-brand"
+import { OliCodeStatus, OliCodeWordmark } from "../../component/olicode-brand"
 
 addDefaultParsers(parsers.parsers)
 
@@ -217,11 +217,11 @@ function SessionStatsBar(props: { sessionID: string }) {
 
   const msgCount = createMemo(() => (sync.data.message[props.sessionID] ?? []).length)
   const state = createMemo(() => {
-    if (!sync.ready) return { label: "SYNCING", color: theme.warning, mark: "○" }
+    if (!sync.ready) return { label: "SYNCING", tone: "warning" as const }
     const status = sync.data.session_status?.[props.sessionID]
     if (status && status.type !== "idle")
-      return { label: "WORKING", color: theme.primary, mark: "◆" }
-    return { label: "READY", color: theme.success, mark: "●" }
+      return { label: "WORKING", tone: "active" as const }
+    return { label: "READY", tone: "success" as const }
   })
 
   return (
@@ -266,12 +266,7 @@ function SessionStatsBar(props: { sessionID: string }) {
         </box>
       </Show>
       <box flexGrow={1} />
-      <box flexDirection="row" gap={1} alignItems="center">
-        <text fg={state().color}>{state().mark}</text>
-        <text fg={state().color}>
-          <b>{state().label}</b>
-        </text>
-      </box>
+      <OliCodeStatus label={state().label} tone={state().tone} />
     </box>
   )
 }
@@ -453,7 +448,7 @@ export function Session() {
         `${logo[3] ?? ""}`,
         ``,
         `  ${weak("Session")}${UI.Style.TEXT_NORMAL_BOLD}${title}${UI.Style.TEXT_NORMAL}`,
-        `  ${weak("Continue")}${UI.Style.TEXT_NORMAL_BOLD}opencode -s ${session()?.id}${UI.Style.TEXT_NORMAL}`,
+        `  ${weak("Continue")}${UI.Style.TEXT_NORMAL_BOLD}olicode -s ${session()?.id}${UI.Style.TEXT_NORMAL}`,
         ``,
       ].join("\n"),
     )
@@ -2209,7 +2204,7 @@ function Task(props: ToolProps<typeof TaskTool>) {
     if (!props.input.description) return ""
     const description =
       props.metadata.background === true ? `${props.input.description} (background)` : props.input.description
-    let content = [`${Locale.titlecase(props.input.subagent_type ?? "General")} Task — ${description}`]
+    let content = [`${Locale.titlecase(props.input.subagent_type ?? "General")} Task - ${description}`]
 
     if (isRunning() && tools().length > 0) {
       // content[0] += ` · ${tools().length} toolcalls`

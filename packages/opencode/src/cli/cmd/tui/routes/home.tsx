@@ -12,6 +12,7 @@ import { TuiPluginRuntime } from "@/cli/cmd/tui/plugin/runtime"
 import { useEditorContext } from "@tui/context/editor"
 import { useTerminalDimensions } from "@opentui/solid"
 import { useTuiConfig } from "../context/tui-config"
+import { OliCodeStatus } from "../component/olicode-brand"
 
 let once = false
 const placeholder = {
@@ -55,8 +56,7 @@ function StatusBar(props: { ready: boolean; width: number }) {
   return (
     <box flexDirection="row" gap={2} alignItems="center" justifyContent="center" paddingTop={1} paddingBottom={1}>
       <box flexDirection="row" gap={1} alignItems="center">
-        <text fg={props.ready ? theme.success : theme.warning}>{props.ready ? "●" : "○"}</text>
-        <text fg={theme.textMuted}>{props.ready ? "READY" : "CONNECTING"}</text>
+        <OliCodeStatus label={props.ready ? "READY" : "CONNECTING"} tone={props.ready ? "success" : "warning"} />
       </box>
       <text fg={theme.border}>│</text>
       <Clock />

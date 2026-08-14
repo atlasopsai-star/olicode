@@ -2,6 +2,7 @@ import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
 import type { InternalTuiPlugin } from "../../plugin/internal"
 import { createMemo, Match, Show, Switch } from "solid-js"
 import { Global } from "@opencode-ai/core/global"
+import { OliCodeWordmark } from "../../component/olicode-brand"
 
 const id = "internal:home-footer"
 
@@ -17,7 +18,7 @@ function Directory(props: { api: TuiPluginApi }) {
 
   return (
     <box flexDirection="row" gap={1} alignItems="center">
-      <text fg={theme().secondary}>◈</text>
+      <text fg={theme().primary}>⌁</text>
       <text fg={theme().textMuted}>{dir()}</text>
     </box>
   )
@@ -69,8 +70,7 @@ function Version(props: { api: TuiPluginApi }) {
 
   return (
     <box flexShrink={0} flexDirection="row" gap={1} alignItems="center">
-      <text fg={theme().primary}>◆</text>
-      <text fg={theme().textMuted}>OliCode</text>
+      <OliCodeWordmark compact muted />
       <text fg={theme().borderActive}>v{props.api.app.version}</text>
     </box>
   )

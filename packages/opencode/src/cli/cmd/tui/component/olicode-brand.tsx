@@ -25,3 +25,25 @@ export function OliCodeSectionTitle(props: { children: string; tone?: "primary" 
     </box>
   )
 }
+
+export function OliCodeStatus(props: {
+  label: string
+  tone?: "idle" | "active" | "success" | "warning" | "error"
+}) {
+  const { theme } = useTheme()
+  const color = () => {
+    if (props.tone === "active") return theme.primary
+    if (props.tone === "success") return theme.success
+    if (props.tone === "warning") return theme.warning
+    if (props.tone === "error") return theme.error
+    return theme.textMuted
+  }
+  return (
+    <box flexDirection="row" gap={1} alignItems="center">
+      <text fg={color()}>{props.tone === "active" ? "◆" : props.tone === "idle" ? "○" : "●"}</text>
+      <text fg={color()} wrapMode="none">
+        <b>{props.label}</b>
+      </text>
+    </box>
+  )
+}
