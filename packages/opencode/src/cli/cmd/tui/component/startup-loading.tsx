@@ -5,18 +5,13 @@ import { OliCodeWordmark } from "./olicode-brand"
 
 export function StartupLoading(props: { ready: () => boolean }) {
   const theme = useTheme().theme
-  const [show, setShow] = createSignal(false)
+  const [show, setShow] = createSignal(true)
   const text = createMemo(() => (props.ready() ? "Finishing startup..." : "Loading plugins..."))
-  let wait: NodeJS.Timeout | undefined
   let hold: NodeJS.Timeout | undefined
-  let stamp = 0
+  const stamp = Date.now()
 
   createEffect(() => {
     if (props.ready()) {
-      if (wait) {
-        clearTimeout(wait)
-        wait = undefined
-      }
       if (!show()) return
       if (hold) return
 
@@ -37,18 +32,9 @@ export function StartupLoading(props: { ready: () => boolean }) {
       clearTimeout(hold)
       hold = undefined
     }
-    if (show()) return
-    if (wait) return
-
-    wait = setTimeout(() => {
-      wait = undefined
-      stamp = Date.now()
-      setShow(true)
-    }, 500).unref()
   })
 
   onCleanup(() => {
-    if (wait) clearTimeout(wait)
     if (hold) clearTimeout(hold)
   })
 
