@@ -55,24 +55,33 @@ export function OliCodeWordmark(
   const { theme } = useTheme()
   const variant = () => props.variant ?? "compact"
   if (variant() === "hero") return <Logo idle={props.animated !== false} />
+  if (variant() === "header") return <Logo shape={derived.header} idle={props.animated !== false} />
+  if (variant() === "compact") return <Logo shape={derived.compact} idle={props.animated === true} />
 
-  const shape = () => (variant() === "header" ? derived.header : derived.compact)
   const left = () => tint(theme.background, theme.primary, props.muted ? 0.38 : 0.58)
   const gold = () => tint(theme.background, theme.primary, props.muted ? 0.52 : 0.92)
   const champagne = () => tint(theme.background, theme.secondary, props.muted ? 0.48 : 0.88)
 
   return (
     <box gap={0}>
-      <For each={shape().left}>
+      <For each={derived.compact.left}>
         {(line, index) => (
           <box flexDirection="row" gap={1}>
             <text fg={left()} wrapMode="none" selectable={false}>
               <b>{line}</b>
             </text>
             <text wrapMode="none" selectable={false}>
-              <For each={Array.from(shape().right[index()] ?? "")}>
+              <For each={Array.from(derived.compact.right[index()] ?? "")}>
                 {(char, charIndex) => (
-                  <span style={{ fg: charIndex() >= Math.floor(shape().right[index()].length * 0.62) ? champagne() : gold(), bold: true }}>
+                  <span
+                    style={{
+                      fg:
+                        charIndex() >= Math.floor(derived.compact.right[index()].length * 0.62)
+                          ? champagne()
+                          : gold(),
+                      bold: true,
+                    }}
+                  >
                     {char}
                   </span>
                 )}

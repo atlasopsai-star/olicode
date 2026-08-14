@@ -238,7 +238,7 @@ function SessionStatsBar(props: { sessionID: string }) {
       border={["bottom"]}
       borderColor={theme.borderSubtle}
     >
-      <Show when={dimensions().width >= 160} fallback={<OliCodeWordmark variant="micro" />}>
+      <Show when={dimensions().width >= 110} fallback={<OliCodeWordmark variant="micro" />}>
         <OliCodeWordmark variant="header" />
       </Show>
       <text fg={theme.border}>│</text>

@@ -57,15 +57,16 @@ export function StartupLoading(props: { ready: () => boolean }) {
       <box position="absolute" zIndex={5000} left={0} right={0} bottom={1} justifyContent="center" alignItems="center">
         <box
           backgroundColor={theme.backgroundPanel}
-          border={["left", "right"]}
+          border={["top", "bottom"]}
           borderColor={theme.borderSubtle}
           paddingLeft={2}
           paddingRight={2}
-          flexDirection="row"
-          gap={2}
+          paddingTop={1}
+          paddingBottom={1}
+          alignItems="center"
+          gap={1}
         >
-          <OliCodeWordmark variant="micro" />
-          <text fg={theme.border}>│</text>
+          <OliCodeWordmark variant="hero" />
           <Spinner color={theme.primary}>{text()}</Spinner>
         </box>
       </box>
