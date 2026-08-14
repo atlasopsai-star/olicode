@@ -12,6 +12,7 @@ const variantFilter = process.env.OLI_BENCH_VARIANT
 const stockBinary = process.env.OLI_BENCH_STOCK_BINARY
 if (stockBinary && !existsSync(stockBinary)) throw new Error(`OLI_BENCH_STOCK_BINARY does not exist: ${stockBinary}`)
 const runTimeout = Number(process.env.OLI_BENCH_TIMEOUT_MS ?? 120_000)
+const auxiliaryTimeout = Number(process.env.OLI_BENCH_AUX_TIMEOUT_MS ?? 30_000)
 const output = process.env.OLI_BENCH_OUTPUT ?? path.join(os.tmpdir(), "olibench-core.json")
 
 const fixture = process.env.OLI_BENCH_FIXTURE
@@ -230,6 +231,13 @@ const results: Array<
     screenshots: string[]
     consoleErrors: string[]
     requiredEvidencePassed: boolean
+    telemetryCaptured: boolean
+    benchmarkOverhead: {
+      exportMilliseconds: number
+      verificationMilliseconds: number
+      acceptanceMilliseconds: number
+      diffMilliseconds: number
+    }
     error?: string
   }
 > = []
@@ -241,11 +249,13 @@ for (const task of tasks) {
       const directory = mkdtempSync(path.join(os.tmpdir(), `olibench-${task.id}-${variant}-`))
       try {
         cpSync(fixture, directory, { recursive: true })
-        await command(["git", "init", "-q"], directory)
-        await command(["git", "add", "."], directory)
+        await command(["git", "init", "-q"], directory, {}, auxiliaryTimeout)
+        await command(["git", "add", "."], directory, {}, auxiliaryTimeout)
         await command(
           ["git", "-c", "user.name=OliBench", "-c", "user.email=bench@localhost", "commit", "-qm", "fixture"],
           directory,
+          {},
+          auxiliaryTimeout,
         )
         const run = await command(
           [
@@ -269,11 +279,16 @@ for (const task of tasks) {
           .map((event) => (event && typeof event === "object" ? (event as Record<string, unknown>).sessionID : undefined))
           .find((item): item is string => typeof item === "string")
         const exported = sessionID && variant === "olicode"
-          ? await command(["bun", "run", "src/index.ts", "export", sessionID], path.resolve(import.meta.dir, ".."))
+          ? await command(
+              ["bun", "run", "src/index.ts", "export", sessionID],
+              path.resolve(import.meta.dir, ".."),
+              {},
+              auxiliaryTimeout,
+            )
           : undefined
-        const verification = await command(["bun", "test"], directory)
-        const acceptance = await command(["bun", "-e", task.check], directory)
-        const diff = await command(["git", "diff", "--numstat"], directory)
+        const verification = await command(["bun", "test"], directory, {}, auxiliaryTimeout)
+        const acceptance = await command(["bun", "-e", task.check], directory, {}, auxiliaryTimeout)
+        const diff = await command(["git", "diff", "--numstat"], directory, {}, auxiliaryTimeout)
         const visual = await capture(directory, task.id, variant, trial)
         const changed = diff.stdout.trim().split("\n").filter(Boolean)
         const observed = metrics(run.stdout, exported?.stdout ?? "")
@@ -302,6 +317,13 @@ for (const task of tasks) {
           additions: changed.reduce((total, line) => total + Number(line.split("\t")[0] || 0), 0),
           deletions: changed.reduce((total, line) => total + Number(line.split("\t")[1] || 0), 0),
           ...visual,
+          telemetryCaptured: variant === "stock" || exported?.exitCode === 0,
+          benchmarkOverhead: {
+            exportMilliseconds: Math.round(exported?.milliseconds ?? 0),
+            verificationMilliseconds: Math.round(verification.milliseconds),
+            acceptanceMilliseconds: Math.round(acceptance.milliseconds),
+            diffMilliseconds: Math.round(diff.milliseconds),
+          },
           error: run.exitCode === 0 ? undefined : run.stderr.trim().slice(-1000),
         })
         await Bun.write(
