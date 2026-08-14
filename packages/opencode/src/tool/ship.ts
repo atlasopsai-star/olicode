@@ -161,6 +161,21 @@ export const ShipTool = Tool.define(
             }
           }
 
+          // Live-caught: `vercel deploy` on a directory with no local project
+          // link either exits fast with an unhelpful truncated "Loading
+          // teams..." message or hangs interactively prompting for one,
+          // burning most of a 240s budget before the bounded timeout above
+          // saves it. Fail fast with the actual fix instead of letting the
+          // model discover this by trial and error across several minutes
+          // of raw `vercel` CLI exploration.
+          const linked = yield* Effect.promise(() =>
+            Bun.file(path.join(instance.directory, ".vercel/project.json")).exists(),
+          )
+          if (!linked)
+            throw new Error(
+              "This directory isn't linked to a Vercel project yet. Run `vercel link` (or `vercel link --yes --scope <team>` non-interactively) before deploying.",
+            )
+
           const args = ["vercel", "deploy", "--yes", ...(params.production ? ["--prod"] : [])]
           const result = yield* command(args, 240_000)
           const url = extractDeploymentUrl(result)

@@ -192,6 +192,37 @@ describe("tool.ship", () => {
       expect(branches).toContain("origin/feature-branch")
     }),
   )
+
+  // Live-caught regression: `vercel deploy` on an unlinked directory either
+  // exits fast with an unhelpful truncated message or hangs interactively,
+  // burning most of the 240s timeout before failing. Observed live: the
+  // model spent several minutes exploring raw `vercel` CLI commands as a
+  // result. Fail fast with the actual fix instead.
+  it.instance("deploy fails fast with the fix when the directory isn't linked to a Vercel project", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      yield* Effect.promise(() => Bun.$`git init -q`.cwd(test.directory).quiet())
+      const tool = yield* ShipTool.pipe(Effect.flatMap((item) => item.init()))
+      const exit = yield* Effect.exit(
+        tool.execute(
+          { action: "deploy" },
+          {
+            sessionID: SessionID.make("ses_ship_deploy_unlinked_test"),
+            messageID: MessageID.make("msg_ship_deploy_unlinked_test"),
+            callID: "call_ship_deploy_unlinked_test",
+            agent: "build",
+            abort: AbortSignal.any([]),
+            messages: [preflight],
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
+          },
+        ),
+      )
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit))
+        expect(Cause.prettyErrors(exit.cause).map((error) => error.message).join("\n")).toContain("vercel link")
+    }),
+  )
 })
 
 describe("tool.ship extractDeploymentUrl", () => {
