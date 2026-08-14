@@ -403,6 +403,47 @@ describe("session.message-v2.fromError", () => {
     expect(result.data.isRetryable).toBe(true)
   })
 
+  // Live-caught: a connection reset mid-stream is caught by the AI SDK's own
+  // fetch layer and re-wrapped as its own APICallError before it ever
+  // reaches MessageV2.fromError -- it never hits the raw-SystemError
+  // ECONNRESET branch covered above. An APICallError constructed this way
+  // (no response ever received) has statusCode undefined, and the AI SDK's
+  // own isRetryable defaults to false whenever statusCode is missing. That
+  // false previously propagated unchanged through parseAPICallError, so a
+  // transient network failure with literally no server response was
+  // classified as NOT retryable -- the opposite of what "no response
+  // received at all" should mean. Confirmed live: this exact shape killed a
+  // whole session mid-task with nothing surfaced to the user.
+  test("an AI-SDK-wrapped connection failure with no status code is retryable", () => {
+    const error = new APICallError({
+      message: "fetch failed",
+      url: "https://api.openai.com/v1/responses",
+      requestBodyValues: {},
+      cause: Object.assign(new Error("socket hang up"), { code: "ECONNRESET" }),
+      isRetryable: false,
+    })
+    expect(error.statusCode).toBeUndefined()
+    const result = MessageV2.fromError(error, { providerID: ProviderID.make("openai") })
+    if (!MessageV2.APIError.isInstance(result)) throw new Error("expected APIError")
+    expect(result.data.isRetryable).toBe(true)
+
+    const retryable = SessionRetry.retryable(result, retryProvider)
+    expect(retryable).toBeDefined()
+  })
+
+  test("a non-openai provider's AI-SDK-wrapped connection failure is also retryable", () => {
+    const error = new APICallError({
+      message: "fetch failed",
+      url: "https://api.anthropic.com/v1/messages",
+      requestBodyValues: {},
+      cause: Object.assign(new Error("socket hang up"), { code: "ECONNRESET" }),
+      isRetryable: false,
+    })
+    const result = MessageV2.fromError(error, { providerID: ProviderID.make("anthropic") })
+    if (!MessageV2.APIError.isInstance(result)) throw new Error("expected APIError")
+    expect(result.data.isRetryable).toBe(true)
+  })
+
   test("converts OpenAI server_error stream chunks to retryable APIError", () => {
     const result = MessageV2.fromError(
       {

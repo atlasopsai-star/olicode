@@ -306,6 +306,19 @@ const live: Layer.Layer<
           maxOutputTokens: prepared.params.maxOutputTokens,
           abortSignal: input.abort,
           headers: prepared.headers,
+          // Deliberately 0 by default: SessionProcessor already wraps the
+          // whole stream call in Effect.retry(SessionRetry.policy(...)),
+          // which classifies errors properly (5xx, connection resets, rate
+          // limits, free-tier upsells) and publishes user-visible retry
+          // status events with real backoff. Giving the AI SDK its own
+          // silent maxRetries here would race that policy: the SDK could
+          // swallow a transient failure internally before the app-level
+          // policy ever saw it, producing an unretried-looking success with
+          // no status event -- the wrong layer to own this decision twice.
+          // (Was briefly changed to 2 to fix a live-caught unretried
+          // ECONNRESET -- root cause was actually that a status-code-less
+          // APICallError defaulted to isRetryable: false in provider/error.ts,
+          // now fixed there instead, which is what SessionRetry.policy reads.)
           maxRetries: input.retries ?? 0,
           messages: prepared.messages,
           model: wrapLanguageModel({

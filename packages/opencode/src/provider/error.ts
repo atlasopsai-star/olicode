@@ -202,7 +202,21 @@ export function parseAPICallError(input: { providerID: ProviderID; error: APICal
     type: "api_error",
     message: m,
     statusCode: input.error.statusCode,
-    isRetryable: input.providerID.startsWith("openai") ? isOpenAiErrorRetryable(input.error) : input.error.isRetryable,
+    // Live-caught: a connection reset (or any failure before a response is
+    // received at all -- DNS, timeout, socket reset) produces an
+    // APICallError with no statusCode. The AI SDK's own isRetryable
+    // defaults to false whenever statusCode is missing, and that false
+    // propagated unchanged through here, so a transient network blip with
+    // literally no server response killed the whole request with no retry
+    // -- the opposite of what "no response received" should mean. A missing
+    // status code is the definition of a transient transport failure, not
+    // a real API error; always retry it regardless of provider.
+    isRetryable:
+      input.error.statusCode === undefined
+        ? true
+        : input.providerID.startsWith("openai")
+          ? isOpenAiErrorRetryable(input.error)
+          : input.error.isRetryable,
     responseHeaders: input.error.responseHeaders,
     responseBody: input.error.responseBody,
     metadata,
