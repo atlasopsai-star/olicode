@@ -308,7 +308,7 @@ export function render(input: { agent: Agent.Info; query: string; taskID?: strin
     `Expected files: ${active.budgets.expectedFiles ?? "unknown"}`,
     `New dependency budget: ${active.budgets.maxNewDependencies ?? 0}`,
     `Required proof: ${active.requiredEvidence.map((item) => item.id).join(", ") || "none"}`,
-    "Use the smallest correct implementation. Reuse existing code, platform behavior, standard library, and installed dependencies before adding code or dependencies.",
+    "Stop at the first of these that actually works, in order: does this need new code at all -- reuse what already exists in this codebase -- standard library -- a native platform feature -- an already-installed dependency -- the shortest correct diff. Never add a new dependency, abstraction, or config for something used once.",
     "Every substantial action must materially help the task contract. Do not perform drive-by cleanup, unrelated formatting, or speculative work.",
     active.rigor === "FAST"
       ? "Use an explicitly named path without rediscovering it. Inspect once, make the surgical edit, then use one cheapest sufficient check (a direct reread is enough for a literal edit) and stop."
@@ -319,6 +319,7 @@ export function render(input: { agent: Agent.Info; query: string; taskID?: strin
       : "Run the cheapest sufficient validation. Changed-file scope is enforced automatically at completion; do not spend a tool call rechecking it.",
     input.agent.name === "plan" ? "Plan precisely. Do not implement code in this mode." : undefined,
     "Final response style: tight. State outcome, changed files, verification, and unresolved issues only.",
+    "No preamble or narration before, between, or after tool calls -- no announcing what you're about to do, no restating the plan, no filler ('Sure!', 'Let me...', 'I'll now...'). Call the tool; if a result needs one sentence of context first, give only that sentence.",
     "</olicode_harness>",
     active.action === "design" ? Design.checklist(Design.contract(input.query)) : undefined,
     active.action === "ship" ? Ship.checklist(Ship.contract(input.query)) : undefined,
