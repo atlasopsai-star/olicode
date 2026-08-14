@@ -125,6 +125,11 @@ function metrics(output: string) {
   )
   const tokens = [...steps.values()].map((item) => item.tokens as Record<string, unknown>)
   const number = (value: unknown) => (typeof value === "number" ? value : 0)
+  const persistedTelemetry = harness.findLast((item) => item.kind === "telemetry")?.data as
+    | Record<string, unknown>
+    | undefined
+  const lifecycle = persistedTelemetry?.timings as Record<string, unknown> | undefined
+  const context = persistedTelemetry?.context as Record<string, unknown> | undefined
   return {
     inputTokens: tokens.reduce((total, item) => total + number(item.input), 0),
     outputTokens: tokens.reduce((total, item) => total + number(item.output), 0),
@@ -182,6 +187,13 @@ function metrics(output: string) {
     unsupportedCompletionClaims: harness.filter(
       (item) => item.kind === "completion" && (item.data as Record<string, unknown>)?.decision === "BLOCK",
     ).length,
+    harnessLifecycleMs: lifecycle
+      ? Object.fromEntries(Object.entries(lifecycle).map(([key, value]) => [key, number(value)]))
+      : {},
+    harnessToolDurationMs: number(persistedTelemetry?.toolDurationMs),
+    systemPromptChars: number(context?.systemPromptChars),
+    toolSurfaceChars: number(context?.toolSurfaceChars),
+    modelMessagesPresented: number(context?.modelMessages),
   }
 }
 

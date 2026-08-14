@@ -2,6 +2,22 @@ import type { MessageV2 } from "./message-v2"
 import type { OliTaskContract } from "./harness"
 import { ScopeGuard, type Classification } from "./scope-guard"
 
+export type LifecycleTimings = {
+  contractMs: number
+  worktreeMs: number
+  toolAssemblyMs: number
+  contextAssemblyMs: number
+  modelAndToolsMs: number
+  proofMs: number
+  persistenceMs: number
+}
+
+export type ContextTelemetry = {
+  systemPromptChars: number
+  toolSurfaceChars: number
+  modelMessages: number
+}
+
 export type Telemetry = {
   modelTurns: number
   inputTokens: number
@@ -18,6 +34,9 @@ export type Telemetry = {
   failedCommands: number
   retries: number
   selectedSkills: string[]
+  toolDurationMs: number
+  timings: LifecycleTimings
+  context: ContextTelemetry
 }
 
 export type Proof = {
@@ -36,7 +55,33 @@ function completedTools(messages: MessageV2.WithParts[]) {
   )
 }
 
-export function telemetry(messages: MessageV2.WithParts[]): Telemetry {
+const emptyTimings = (): LifecycleTimings => ({
+  contractMs: 0,
+  worktreeMs: 0,
+  toolAssemblyMs: 0,
+  contextAssemblyMs: 0,
+  modelAndToolsMs: 0,
+  proofMs: 0,
+  persistenceMs: 0,
+})
+
+const emptyContext = (): ContextTelemetry => ({
+  systemPromptChars: 0,
+  toolSurfaceChars: 0,
+  modelMessages: 0,
+})
+
+export function taskMessages(messages: MessageV2.WithParts[], userID: string) {
+  return messages.some((message) => message.info.id === userID)
+    ? messages.filter((message) => message.info.id >= userID)
+    : messages
+}
+
+export function telemetry(
+  messages: MessageV2.WithParts[],
+  timings: LifecycleTimings = emptyTimings(),
+  context: ContextTelemetry = emptyContext(),
+): Telemetry {
   const tools = completedTools(messages)
   const reads = tools.filter((part) => part.tool === "read").map((part) => String(part.state.input.filePath ?? ""))
   const searches = tools
@@ -75,6 +120,12 @@ export function telemetry(messages: MessageV2.WithParts[]): Telemetry {
     selectedSkills: tools
       .filter((part) => part.tool === "skill")
       .map((part) => String(part.state.metadata?.name ?? "unknown")),
+    toolDurationMs: tools.reduce(
+      (total, part) => total + Math.max(0, (part.state.time.end ?? part.state.time.start) - part.state.time.start),
+      0,
+    ),
+    timings: { ...timings },
+    context: { ...context },
   }
 }
 
@@ -83,6 +134,8 @@ export function proof(
   contract: OliTaskContract,
   rolledBack: string[] = [],
   workspaceFiles: string[] = [],
+  timings: LifecycleTimings = emptyTimings(),
+  context: ContextTelemetry = emptyContext(),
 ): Proof {
   const tools = completedTools(messages)
   const report = ScopeGuard.scan(messages)
@@ -143,7 +196,7 @@ export function proof(
   if (shipping.some((part) => part.state.input.action === "deploy")) facts.add("deploy")
   const required = contract.requiredEvidence.map((item) => item.id)
   const missing = required.filter((item) => !facts.has(item))
-  const metrics = telemetry(messages)
+  const metrics = telemetry(messages, timings, context)
   return {
     satisfied: required.filter((item) => facts.has(item)),
     missing,

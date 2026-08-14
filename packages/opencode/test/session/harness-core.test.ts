@@ -182,6 +182,41 @@ describe("harness core", () => {
     expect(HarnessCore.telemetry(messages).repeatedSearches).toBe(1)
   })
 
+  test("task telemetry excludes earlier requests in a long session", () => {
+    const previous = tool("read", { filePath: "/repo/previous.ts" })
+    const active = tool("read", { filePath: "/repo/active.ts" })
+    const messages = HarnessCore.taskMessages([previous, active], active.info.id)
+
+    expect(messages).toEqual([active])
+    expect(HarnessCore.telemetry(messages).filesRead).toBe(1)
+  })
+
+  test("telemetry records operational phase and tool durations", () => {
+    const timings: HarnessCore.LifecycleTimings = {
+      contractMs: 1,
+      worktreeMs: 2,
+      toolAssemblyMs: 3,
+      contextAssemblyMs: 4,
+      modelAndToolsMs: 5,
+      proofMs: 6,
+      persistenceMs: 7,
+    }
+    const context: HarnessCore.ContextTelemetry = {
+      systemPromptChars: 100,
+      toolSurfaceChars: 200,
+      modelMessages: 3,
+    }
+    const result = HarnessCore.telemetry(
+      [tool("read", { filePath: "/repo/active.ts" }), tool("shell", { command: "bun test" }, { exit: 0 })],
+      timings,
+      context,
+    )
+
+    expect(result.toolDurationMs).toBe(2)
+    expect(result.timings).toEqual(timings)
+    expect(result.context).toEqual(context)
+  })
+
   test("response controller removes filler and caps tight responses", () => {
     expect(HarnessCore.response("Sure! Fixed it.")).toBe("Fixed it.")
     expect(HarnessCore.response(`Result\n\n\n${"x".repeat(2_100)}`)).toEndWith("[Response shortened by OliHarness]")

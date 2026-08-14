@@ -1297,6 +1297,20 @@ export const layer = Layer.effect(
         const slog = elog.with({ sessionID })
         let structured: unknown
         let step = 0
+        const timings: HarnessCore.LifecycleTimings = {
+          contractMs: 0,
+          worktreeMs: 0,
+          toolAssemblyMs: 0,
+          contextAssemblyMs: 0,
+          modelAndToolsMs: 0,
+          proofMs: 0,
+          persistenceMs: 0,
+        }
+        const contextTelemetry: HarnessCore.ContextTelemetry = {
+          systemPromptChars: 0,
+          toolSurfaceChars: 0,
+          modelMessages: 0,
+        }
         const session = yield* sessions.get(sessionID).pipe(Effect.orDie)
 
         while (true) {
@@ -1306,6 +1320,7 @@ export const layer = Layer.effect(
 
           if (!lastUser) throw new Error("No user message found in stream. This should never happen.")
 
+          const contractStarted = performance.now()
           const execution = SessionHarness.execution({
             taskID: lastUser.id,
             query: (msgs.findLast((msg) => msg.info.id === lastUser.id)?.parts ?? [])
@@ -1313,6 +1328,7 @@ export const layer = Layer.effect(
               .map((part) => part.text)
               .join("\n"),
           })
+          timings.contractMs += performance.now() - contractStarted
 
           if (
             SessionHarness.enabled() &&
@@ -1322,7 +1338,10 @@ export const layer = Layer.effect(
               ),
             )
           ) {
+            const worktreeStarted = performance.now()
             const worktree = yield* Effect.promise(() => ScopeGuard.snapshot(ctx.worktree))
+            timings.worktreeMs += performance.now() - worktreeStarted
+            const persistenceStarted = performance.now()
             yield* HarnessRecord.write({
               session: sessions,
               sessionID,
@@ -1343,6 +1362,7 @@ export const layer = Layer.effect(
                 budgets: execution.contract.budgets,
               },
             })
+            timings.persistenceMs += performance.now() - persistenceStarted
           }
 
           yield* status.set(sessionID, {
@@ -1481,7 +1501,9 @@ export const layer = Layer.effect(
             const lastUserMsg = msgs.findLast((m) => m.info.role === "user")
             const bypassAgentCheck = lastUserMsg?.parts.some((p) => p.type === "agent") ?? false
             const promptOps = yield* ops()
+            const activeMessages = HarnessCore.taskMessages(msgs, lastUser.id)
 
+            const toolAssemblyStarted = performance.now()
             const tools = yield* SessionTools.resolve({
               agent,
               session,
@@ -1489,7 +1511,7 @@ export const layer = Layer.effect(
               model,
               processor: handle,
               bypassAgentCheck,
-              messages: msgs,
+              messages: activeMessages,
               promptOps,
               execution: SessionHarness.enabled() ? execution : undefined,
             }).pipe(
@@ -1499,6 +1521,7 @@ export const layer = Layer.effect(
               Effect.provideService(MCP.Service, mcp),
               Effect.provideService(Truncate.Service, truncate),
             )
+            timings.toolAssemblyMs += performance.now() - toolAssemblyStarted
 
             if (lastUser.format?.type === "json_schema") {
               tools["StructuredOutput"] = createStructuredOutputTool({
@@ -1543,6 +1566,7 @@ export const layer = Layer.effect(
                   .join("\n")
               : ""
 
+            const contextAssemblyStarted = performance.now()
             const [harness, skills, env, instructions, modelMsgs] = yield* Effect.all([
               sys.harness({ agent, query, taskID: lastUser.id }),
               sys.skills({ agent, query }),
@@ -1550,12 +1574,19 @@ export const layer = Layer.effect(
               instruction.system().pipe(Effect.orDie),
               MessageV2.toModelMessagesEffect(msgs, model),
             ])
+            timings.contextAssemblyMs += performance.now() - contextAssemblyStarted
             const system = [...env, harness, ...instructions, ...(skills ? [skills] : [])]
             const format = lastUser.format ?? { type: "text" as const }
             if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
             const requireShipPreflight =
-              execution.mode === "ship" && !HarnessCore.hasCompletedToolAction(msgs, "ship", "preflight")
+              execution.mode === "ship" && !HarnessCore.hasCompletedToolAction(activeMessages, "ship", "preflight")
             const activeTools = requireShipPreflight && tools.ship ? { ship: tools.ship } : tools
+            contextTelemetry.systemPromptChars += system.reduce((total, item) => total + item.length, 0)
+            contextTelemetry.toolSurfaceChars += JSON.stringify(activeTools, (_key, value) =>
+              typeof value === "function" ? undefined : value,
+            ).length
+            contextTelemetry.modelMessages += modelMsgs.length
+            const modelStarted = performance.now()
             const result = yield* handle.process({
               user: lastUser,
               agent,
@@ -1568,6 +1599,7 @@ export const layer = Layer.effect(
               model,
               toolChoice: format.type === "json_schema" || requireShipPreflight ? "required" : undefined,
             })
+            timings.modelAndToolsMs += performance.now() - modelStarted
 
             if (structured !== undefined) {
               handle.message.structured = structured
@@ -1589,6 +1621,7 @@ export const layer = Layer.effect(
 
               if (SessionHarness.enabled() && execution.contract.requiredEvidence.length > 0) {
                 const current = yield* MessageV2.filterCompactedEffect(sessionID)
+                const active = HarnessCore.taskMessages(current, lastUser.id)
                 const initial = current
                   .flatMap((message) => message.parts)
                   .find(
@@ -1600,14 +1633,26 @@ export const layer = Layer.effect(
                   )
                 const workspaceFiles =
                   initial?.type === "harness" && ScopeGuard.isWorktreeSnapshot(initial.data.worktree)
-                    ? ScopeGuard.changedSince(
-                        initial.data.worktree,
-                        yield* Effect.promise(() => ScopeGuard.snapshot(ctx.worktree)),
-                      )
+                    ? yield* Effect.gen(function* () {
+                        const worktreeStarted = performance.now()
+                        const snapshot = yield* Effect.promise(() => ScopeGuard.snapshot(ctx.worktree))
+                        timings.worktreeMs += performance.now() - worktreeStarted
+                        return ScopeGuard.changedSince(initial.data.worktree, snapshot)
+                      })
                     : []
-                let proof = HarnessCore.proof(current, execution.contract, [], workspaceFiles)
+                const proofStarted = performance.now()
+                let proof = HarnessCore.proof(
+                  active,
+                  execution.contract,
+                  [],
+                  workspaceFiles,
+                  timings,
+                  contextTelemetry,
+                )
+                timings.proofMs += performance.now() - proofStarted
+                proof.telemetry.timings = { ...timings }
                 const rolledBack: string[] = []
-                for (const candidate of HarnessCore.rollbackCandidates(current, proof)) {
+                for (const candidate of HarnessCore.rollbackCandidates(active, proof)) {
                   const content = yield* fsys
                     .readFileString(candidate.file)
                     .pipe(Effect.catch(() => Effect.succeed(undefined)))
@@ -1628,7 +1673,15 @@ export const layer = Layer.effect(
                   })
                 }
                 if (rolledBack.length)
-                  proof = HarnessCore.proof(current, execution.contract, rolledBack, workspaceFiles)
+                  proof = HarnessCore.proof(
+                    active,
+                    execution.contract,
+                    rolledBack,
+                    workspaceFiles,
+                    timings,
+                    contextTelemetry,
+                  )
+                const persistenceStarted = performance.now()
                 yield* HarnessRecord.write({
                   session: sessions,
                   sessionID,
@@ -1637,13 +1690,14 @@ export const layer = Layer.effect(
                   kind: "proof",
                   data: proof,
                 })
+                timings.persistenceMs += performance.now() - persistenceStarted
                 yield* HarnessRecord.write({
                   session: sessions,
                   sessionID,
                   messageID: handle.message.id,
                   taskID: execution.contract.id,
                   kind: "telemetry",
-                  data: proof.telemetry,
+                  data: { ...proof.telemetry, timings: { ...timings }, context: { ...contextTelemetry } },
                 })
                 if (!proof.stop) {
                   const reminded = lastUserMsg?.parts.some(
