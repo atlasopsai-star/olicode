@@ -656,6 +656,10 @@ export const RunCommand = effectCmd({
               const part = event.properties.part
               if (part.sessionID !== sessionID) continue
 
+              if (part.type === "harness") {
+                if (emit("harness", { part })) continue
+              }
+
               if (part.type === "tool" && (part.state.status === "completed" || part.state.status === "error")) {
                 if (emit("tool_use", { part })) continue
                 if (part.state.status === "completed") {
