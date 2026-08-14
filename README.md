@@ -37,10 +37,13 @@ It is meant to be a harnessed coding agent system that:
 
 - custom OliCode branding and premium dark command-center feel
 - gamified OliCode vibe with visual polish and session energy
-- multi-agent workflow foundation
-- mode-aware harness guidance for build/debug/design/research/browser/ship tasks
+- one primary coding agent by default, with optional specialists only when useful
+- runtime-enforced task contracts for build/debug/design/research/browser/ship tasks
 - task-aware model routing
-- relevant-skill prioritization to reduce prompt bloat
+- compact skill and tool routing to reduce prompt bloat
+- pre-write and post-diff scope enforcement
+- proof-of-done gates before completion claims
+- deterministic browser QA and authorization-gated Git/GitHub/Vercel shipping
 - live token/cost/session signals in the terminal workflow
 - custom project skills for:
   - lean coding discipline
@@ -52,9 +55,9 @@ It is meant to be a harnessed coding agent system that:
 1. User chats with OliCode in the terminal
 2. OliCode classifies the task type
 3. OliCode routes toward a better-fit model if one is not explicitly pinned
-4. OliCode injects focused harness instructions and relevant skills
-5. OliCode executes tools and subtasks with richer metadata
-6. OliCode verifies work with tests, typechecks, and builds where possible
+4. OliCode creates a persistent task contract with scope, budgets, and required evidence
+5. OliCode exposes only relevant tools and skills, then guards every mutation
+6. OliCode checks the actual diff and required proof before allowing completion
 
 ## Quick start
 
@@ -93,7 +96,7 @@ olicode
 
 ## Agents
 
-OliCode ships with a purpose-built agent team switchable with `Tab` and callable directly with `@agent-name`.
+OliCode uses one primary implementation agent by default. Optional specialists remain available for tasks where their expected value exceeds their context and tool cost.
 
 Common agents include:
 - `build` — primary implementation agent
