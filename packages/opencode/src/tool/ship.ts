@@ -20,6 +20,25 @@ type Metadata = {
   artifacts: readonly string[]
 }
 
+// Recent Vercel CLI versions append a trailing JSON summary when they detect an
+// agent environment. That JSON's `deploymentApiUrl` field also matches
+// `https://...`, and sorts after the real `deployment.url`, so a naive "last
+// https URL in the output" scan silently returns the API endpoint instead of
+// the browsable deployment URL. Prefer the structured field when present.
+export function extractDeploymentUrl(output: string): string | undefined {
+  const jsonStart = output.indexOf("{")
+  if (jsonStart !== -1) {
+    try {
+      const parsed = JSON.parse(output.slice(jsonStart))
+      const url = parsed?.deployment?.url
+      if (typeof url === "string" && url.length > 0) return url.startsWith("http") ? url : `https://${url}`
+    } catch {
+      // stdout wasn't (entirely) JSON -- fall through to regex extraction below
+    }
+  }
+  return output.match(/https:\/\/[^\s"'<>]+/g)?.at(-1)
+}
+
 export const ShipTool = Tool.define(
   "ship",
   Effect.gen(function* () {
@@ -29,18 +48,38 @@ export const ShipTool = Tool.define(
       execute: (params, ctx) =>
         Effect.gen(function* () {
           const instance = yield* InstanceState.context
-          const command = (args: string[]) =>
+          // Vercel (and occasionally git/gh) can leave a subprocess hanging indefinitely --
+          // e.g. `vercel deploy` polls forever on a deployment stuck in a BLOCKED readyState
+          // (observed live: git-author verification rejects an unrecognized commit author and
+          // the CLI never surfaces an error, it just never stops "Building…"). Without a bound,
+          // that hangs the whole tool call and the agent turn forever.
+          const command = (args: string[], timeoutMs = 60_000) =>
             Effect.tryPromise({
               try: async () => {
-                const child = Bun.spawn(args, { cwd: instance.directory, stdout: "pipe", stderr: "pipe" })
-                const [stdout, stderr, exit] = await Promise.all([
-                  new Response(child.stdout).text(),
-                  new Response(child.stderr).text(),
-                  child.exited,
-                ])
-                if (exit !== 0)
-                  throw new Error(`${args.slice(0, 2).join(" ")} failed (${exit}): ${stderr.trim() || stdout.trim()}`)
-                return stdout.trim()
+                const controller = new AbortController()
+                const timer = setTimeout(() => controller.abort(), timeoutMs)
+                try {
+                  const child = Bun.spawn(args, {
+                    cwd: instance.directory,
+                    stdout: "pipe",
+                    stderr: "pipe",
+                    signal: controller.signal,
+                  })
+                  const [stdout, stderr, exit] = await Promise.all([
+                    new Response(child.stdout).text(),
+                    new Response(child.stderr).text(),
+                    child.exited,
+                  ])
+                  if (controller.signal.aborted)
+                    throw new Error(
+                      `${args.slice(0, 2).join(" ")} timed out after ${timeoutMs}ms and was terminated. If this was a Vercel deploy, check the deployment's readyState (it may be BLOCKED -- e.g. an unrecognized git commit author) via the Vercel dashboard.`,
+                    )
+                  if (exit !== 0)
+                    throw new Error(`${args.slice(0, 2).join(" ")} failed (${exit}): ${stderr.trim() || stdout.trim()}`)
+                  return stdout.trim()
+                } finally {
+                  clearTimeout(timer)
+                }
               },
               catch: (error) => (error instanceof Error ? error : new Error(String(error))),
             })
@@ -109,8 +148,8 @@ export const ShipTool = Tool.define(
           }
 
           const args = ["vercel", "deploy", "--yes", ...(params.production ? ["--prod"] : [])]
-          const result = yield* command(args)
-          const url = result.match(/https:\/\/[^\s]+/g)?.at(-1)
+          const result = yield* command(args, 240_000)
+          const url = extractDeploymentUrl(result)
           if (!url) throw new Error(`Vercel completed without returning a deployment URL: ${result}`)
           return {
             title: params.production ? "production deployed" : "preview deployed",

@@ -1,6 +1,6 @@
-import { afterEach, describe, expect } from "bun:test"
+import { afterEach, describe, expect, test } from "bun:test"
 import { Cause, Effect, Exit, Layer } from "effect"
-import { ShipTool } from "@/tool/ship"
+import { extractDeploymentUrl, ShipTool } from "@/tool/ship"
 import { Tool } from "@/tool/tool"
 import { MessageID, PartID, SessionID } from "@/session/schema"
 import { ModelID, ProviderID } from "@/provider/schema"
@@ -155,4 +155,46 @@ describe("tool.ship", () => {
         expect(Cause.prettyErrors(exit.cause).map((error) => error.message).join("\n")).toContain("git push failed")
     }),
   )
+})
+
+describe("tool.ship extractDeploymentUrl", () => {
+  // Live-caught regression: recent Vercel CLI versions emit a trailing JSON
+  // summary (on stdout) when they detect an agent environment. That JSON's
+  // deploymentApiUrl field also matches /https:\/\/.../ and sorts after the
+  // real deployment.url, so a naive "last https URL in the output" scan
+  // silently returned the API endpoint instead of the browsable deployment.
+  test("prefers deployment.url from a trailing Vercel JSON summary over deploymentApiUrl", () => {
+    const output = JSON.stringify({
+      status: "ok",
+      deployment: {
+        id: "dpl_123",
+        url: "https://ship-roundtrip-abc123-team.vercel.app",
+        inspectorUrl: "https://vercel.com/team/ship-roundtrip/dpl_123",
+        readyState: "READY",
+        target: null,
+        deploymentApiUrl: "https://api.vercel.com/v13/deployments/dpl_123",
+      },
+      message: "Deployment ready.",
+    })
+    expect(extractDeploymentUrl(output)).toBe("https://ship-roundtrip-abc123-team.vercel.app")
+  })
+
+  test("falls back to regex extraction for plain-text CLI output with no JSON summary", () => {
+    const output = [
+      "Retrieving project…",
+      "Deploying team/project",
+      "  Inspect     https://vercel.com/team/project/dpl_456",
+      "  Preview     https://project-def456-team.vercel.app",
+    ].join("\n")
+    expect(extractDeploymentUrl(output)).toBe("https://project-def456-team.vercel.app")
+  })
+
+  test("regex fallback excludes a trailing quote so the URL is never mangled", () => {
+    const output = 'artifact captured mid-json: "https://project-ghi789-team.vercel.app"'
+    expect(extractDeploymentUrl(output)).toBe("https://project-ghi789-team.vercel.app")
+  })
+
+  test("returns undefined when no URL is present anywhere in the output", () => {
+    expect(extractDeploymentUrl("Building…\nno url here")).toBeUndefined()
+  })
 })
