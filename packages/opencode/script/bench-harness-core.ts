@@ -26,27 +26,36 @@ const tasks = JSON.parse(readFileSync(path.join(fixture, "tasks.json"), "utf8"))
 
 async function command(args: string[], cwd: string, env: Record<string, string> = {}, timeout?: number) {
   const started = performance.now()
+  const logs = mkdtempSync(path.join(os.tmpdir(), "olibench-command-"))
+  const stdout = Bun.file(path.join(logs, "stdout"))
+  const stderr = Bun.file(path.join(logs, "stderr"))
   const child = Bun.spawn(args, {
     cwd,
     env: { ...globalThis.process.env, ...env },
-    stdout: "pipe",
-    stderr: "pipe",
+    stdout,
+    stderr,
     detached: true,
   })
   let timedOut = false
-  const timer = timeout
-    ? setTimeout(() => {
-        timedOut = true
-        process.kill(-child.pid, "SIGKILL")
-      }, timeout)
+  const completed = child.exited.then(async (exitCode) => ({
+    stdout: await stdout.text(),
+    stderr: await stderr.text(),
+    exitCode,
+  }))
+  let timer: NodeJS.Timeout | undefined
+  const deadline = timeout
+    ? new Promise<{ stdout: string; stderr: string; exitCode: number }>((resolve) =>
+        (timer = setTimeout(() => {
+          timedOut = true
+          process.kill(-child.pid, "SIGKILL")
+          resolve({ stdout: "", stderr: `Command timed out after ${timeout}ms`, exitCode: 124 })
+        }, timeout).unref()),
+      )
     : undefined
-  const [stdout, stderr, exitCode] = await Promise.all([
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-    child.exited,
-  ])
+  const result = deadline ? await Promise.race([completed, deadline]) : await completed
   if (timer) clearTimeout(timer)
-  return { stdout, stderr, exitCode, timedOut, milliseconds: performance.now() - started }
+  rmSync(logs, { recursive: true, force: true })
+  return { ...result, timedOut, milliseconds: performance.now() - started }
 }
 
 async function capture(directory: string, task: string, variant: string, trial: number) {
@@ -122,6 +131,13 @@ function metrics(output: string) {
     modelTurns: steps.size,
     toolCalls: completed.length,
     tools: completed.map((item) => item.tool).filter((item): item is string => typeof item === "string"),
+    toolTrace: completed.map((item) => ({
+      tool: typeof item.tool === "string" ? item.tool : "unknown",
+      input:
+        item.state && typeof item.state === "object"
+          ? (item.state as Record<string, unknown>).input
+          : undefined,
+    })),
     browserActions: completed
       .filter((item) => item.tool === "browser")
       .map((item) => (item.state as Record<string, Record<string, unknown>>).input?.action)
