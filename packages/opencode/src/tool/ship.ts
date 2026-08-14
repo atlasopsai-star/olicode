@@ -129,7 +129,21 @@ export const ShipTool = Tool.define(
           }
 
           if (params.action === "push") {
-            const result = yield* command(["git", "push"])
+            // Live-caught: a bare `git push` fails with "no upstream branch" for
+            // the first push of any new branch (the overwhelmingly common case
+            // when shipping work), and the model routed around the tool with
+            // raw git commands rather than getting a usable error back. Detect
+            // that one specific, safe-to-retry case and set the upstream --
+            // never retry on any other failure (rejected push, auth, etc).
+            const result = yield* command(["git", "push"]).pipe(
+              Effect.catch((error) =>
+                /no upstream branch/i.test(error.message)
+                  ? command(["git", "branch", "--show-current"]).pipe(
+                      Effect.flatMap((branch) => command(["git", "push", "--set-upstream", "origin", branch])),
+                    )
+                  : Effect.fail(error),
+              ),
+            )
             return {
               title: "branch pushed",
               metadata: { action: "push", status: "success" as const, artifacts: [] },

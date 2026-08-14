@@ -155,6 +155,43 @@ describe("tool.ship", () => {
         expect(Cause.prettyErrors(exit.cause).map((error) => error.message).join("\n")).toContain("git push failed")
     }),
   )
+
+  // Live-caught regression: the first push of any new branch fails a bare
+  // `git push` with "no upstream branch" -- the overwhelmingly common case
+  // when shipping work, not an edge case. Observed live: the model routed
+  // around the ship tool with raw git commands after this failed instead of
+  // getting a working push. A real (local, no network) bare repo stands in
+  // for origin so this exercises the actual git error path, not a mock.
+  it.instance("push automatically sets upstream on a branch's first push", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const remote = `${test.directory}-remote.git`
+      yield* Effect.promise(() => Bun.$`git init -q --bare ${remote}`.quiet())
+      yield* Effect.promise(() => Bun.$`git init -q`.cwd(test.directory).quiet())
+      yield* Effect.promise(() => Bun.$`git remote add origin ${remote}`.cwd(test.directory).quiet())
+      yield* Effect.promise(() =>
+        Bun.$`git -c user.email=t@t.com -c user.name=t commit -q --allow-empty -m init`.cwd(test.directory).quiet(),
+      )
+      yield* Effect.promise(() => Bun.$`git checkout -q -b feature-branch`.cwd(test.directory).quiet())
+      const tool = yield* ShipTool.pipe(Effect.flatMap((item) => item.init()))
+      const result = yield* tool.execute(
+        { action: "push" },
+        {
+          sessionID: SessionID.make("ses_ship_push_upstream_test"),
+          messageID: MessageID.make("msg_ship_push_upstream_test"),
+          callID: "call_ship_push_upstream_test",
+          agent: "build",
+          abort: AbortSignal.any([]),
+          messages: [preflight],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+      expect(result.metadata.status).toBe("success")
+      const branches = yield* Effect.promise(() => Bun.$`git branch -r`.cwd(test.directory).text())
+      expect(branches).toContain("origin/feature-branch")
+    }),
+  )
 })
 
 describe("tool.ship extractDeploymentUrl", () => {

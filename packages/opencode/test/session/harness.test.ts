@@ -179,4 +179,23 @@ describe("session.harness", () => {
     expect(contract.requiredEvidence.map((item) => item.id)).toContain("tests")
     expect(contract.requiredEvidence.map((item) => item.id)).toContain("typecheck")
   })
+
+  // Live-caught regression: a debug report that names only the failing test
+  // ("cart.test.js throws") previously narrowed allowedScope to exactly that
+  // test file, hard-blocking every edit to the implementation file the test
+  // actually exercises -- backwards for debugging, where the test names the
+  // symptom and the fix belongs elsewhere. Confirmed live: apply_patch and
+  // shell mutation to the real bug's file were both rejected as "outside the
+  // explicit task scope" across four different fix attempts in one session.
+  test("naming only a test file in the report does not lock scope to that file", () => {
+    const contract = SessionHarness.contract(
+      "This flow is broken: node cart.test.js throws instead of passing. Find the root cause and fix it.",
+    )
+    expect(contract.allowedScope).toEqual(["."])
+  })
+
+  test("naming an implementation file alongside a test file keeps the narrower scope", () => {
+    const contract = SessionHarness.contract("Fix src/cart.ts; cart.test.ts currently fails.")
+    expect(contract.allowedScope).toEqual(["src/cart.ts"])
+  })
 })

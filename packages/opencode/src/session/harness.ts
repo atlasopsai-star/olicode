@@ -241,7 +241,15 @@ function scopes(query: string) {
   const explicit = [...query.matchAll(PATH), ...query.matchAll(FILE)].flatMap((match) =>
     match[1] ? [match[1].replace(/[.,]$/, "")] : [],
   )
-  return explicit.length ? [...new Set(explicit)] : ["."]
+  // A query that names only a test/spec file (very natural for a debug
+  // report: "X test is failing") is not evidence the fix belongs there --
+  // it names the symptom, not the scope. Live-caught: this previously
+  // narrowed allowedScope to exactly the test file and hard-blocked every
+  // edit to the actual implementation file the test exercises, across
+  // apply_patch and shell mutation both, wasting the whole debug turn.
+  // Treat an all-test-file mention the same as no explicit file at all.
+  const nonTest = explicit.filter((item) => !/\b(?:test|tests|spec|__tests__)\b/i.test(item))
+  return nonTest.length ? [...new Set(nonTest)] : ["."]
 }
 
 export function contract(query: string, id = stableID(query)): OliTaskContract {
@@ -304,6 +312,8 @@ export function render(input: { agent: Agent.Info; query: string; taskID?: strin
     "Every substantial action must materially help the task contract. Do not perform drive-by cleanup, unrelated formatting, or speculative work.",
     active.rigor === "FAST"
       ? "Use an explicitly named path without rediscovering it. Inspect once, make the surgical edit, then use one cheapest sufficient check (a direct reread is enough for a literal edit) and stop."
+      : active.rigor === "STANDARD" && active.action === "change"
+        ? "Read explicitly named source paths directly. If a requested companion test is unnamed, use one targeted search to locate it; do not scan configs or unrelated source files unless the first targeted validation fails. Changed-file scope is enforced automatically; do not spend a tool call rechecking it."
       : "Run the cheapest sufficient validation. Changed-file scope is enforced automatically at completion; do not spend a tool call rechecking it.",
     input.agent.name === "plan" ? "Plan precisely. Do not implement code in this mode." : undefined,
     "Final response style: tight. State outcome, changed files, verification, and unresolved issues only.",
