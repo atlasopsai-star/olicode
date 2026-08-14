@@ -110,6 +110,30 @@ afterEach(async () => {
 })
 
 describe("tool.registry", () => {
+  test("hides redundant scope check when the harness enforces completion scope", () => {
+    expect(visibleForExecution("scope_check", SessionHarness.execution({ query: "Fix src/app.ts" }))).toBe(false)
+    expect(visibleForExecution("scope_check")).toBe(true)
+  })
+
+  test("keeps todo ceremony out of standard change tasks", () => {
+    const execution = SessionHarness.execution({
+      query: "Add a loading state using the existing component pattern and add a focused test",
+    })
+
+    expect(execution.mode).toBe("change")
+    expect(execution.rigor).toBe("STANDARD")
+    expect(visibleForExecution("todowrite", execution)).toBe(false)
+  })
+
+  test("uses real tool IDs when shrinking the fast action surface", () => {
+    const execution = SessionHarness.execution({ query: "Change src/header.ts button label" })
+
+    expect(execution.rigor).toBe("FAST")
+    for (const tool of ["task", "webfetch", "websearch", "skill", "todowrite"])
+      expect(visibleForExecution(tool, execution)).toBe(false)
+    expect(visibleForExecution("read", execution)).toBe(true)
+  })
+
   test("exposes ship only for shipping contracts", () => {
     expect(visibleForExecution("ship", SessionHarness.execution({ query: "Fix src/app.ts" }))).toBe(false)
     expect(visibleForExecution("ship", SessionHarness.execution({ query: "Push this branch and open a PR" }))).toBe(true)

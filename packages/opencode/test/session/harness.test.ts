@@ -77,6 +77,16 @@ describe("session.harness", () => {
     expect(output).toContain("make the surgical edit")
   })
 
+  test("render does not ask standard tasks to repeat automatic scope enforcement", () => {
+    const output = SessionHarness.render({
+      agent: build,
+      query: "Add a loading state using the existing component pattern and add a focused test",
+    })
+
+    expect(output).toContain("scope is enforced automatically")
+    expect(output).toContain("do not spend a tool call rechecking it")
+  })
+
   test("contract protects lockfiles and budgets dependencies", () => {
     const contract = SessionHarness.contract("Change src/button.ts label")
     expect(contract.action).toBe("change")

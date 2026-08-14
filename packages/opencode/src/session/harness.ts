@@ -304,7 +304,7 @@ export function render(input: { agent: Agent.Info; query: string }) {
     "Every substantial action must materially help the task contract. Do not perform drive-by cleanup, unrelated formatting, or speculative work.",
     active.rigor === "FAST"
       ? "Inspect the target, make the surgical edit, verify narrowly, and stop."
-      : "Verify the acceptance criteria and changed-file scope before finishing.",
+      : "Run the cheapest sufficient validation. Changed-file scope is enforced automatically at completion; do not spend a tool call rechecking it.",
     input.agent.name === "plan" ? "Plan precisely. Do not implement code in this mode." : undefined,
     "Final response style: tight. State outcome, changed files, verification, and unresolved issues only.",
     "</olicode_harness>",

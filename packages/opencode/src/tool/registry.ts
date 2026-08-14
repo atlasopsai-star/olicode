@@ -68,6 +68,12 @@ export function webSearchEnabled(providerID: ProviderID, flags = { exa: false, p
 
 export function visibleForExecution(toolID: string, execution?: { mode: Action; rigor: RigorLevel }) {
   if (!execution) return true
+  // Harness completion already runs the authoritative post-diff ScopeGuard.
+  // Exposing the manual check makes models spend an extra tool call repeating it.
+  if (toolID === "scope_check") return false
+  if (execution.rigor === "FAST" && ["task", "webfetch", "websearch", "skill", "todowrite"].includes(toolID))
+    return false
+  if (toolID === "todowrite" && execution.mode === "change" && execution.rigor === "STANDARD") return false
   if (toolID === "browser") return ["browser", "design"].includes(execution.mode)
   if (toolID === "ship") return execution.mode === "ship"
   return true
@@ -337,8 +343,6 @@ export const layer: Layer.Layer<
 
     const tools: Interface["tools"] = Effect.fn("ToolRegistry.tools")(function* (input) {
       const filtered = (yield* all()).filter((tool) => {
-        if (input.execution?.rigor === "FAST" && ["task", "fetch", "search", "skill", "todo"].includes(tool.id))
-          return false
         // The browser tool spins up a real Chrome process -- keep its schema
         // out of unrelated tasks entirely rather than just discouraging use.
         if (!visibleForExecution(tool.id, input.execution)) return false
