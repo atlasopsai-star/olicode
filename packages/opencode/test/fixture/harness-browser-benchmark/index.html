@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Fernway Goods</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 0; color: #1c1c1c; }
+      header, main, footer { max-width: 960px; margin: auto; padding: 24px; }
+      nav { display: flex; justify-content: space-between; align-items: center; }
+      .products { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 24px; }
+      .product { border: 1px solid #ddd; border-radius: 8px; padding: 16px; }
+      .product button { margin-top: 8px; }
+      .cart-panel {
+        position: fixed;
+        top: 80px;
+        right: 20px;
+        width: 480px;
+        border: 1px solid #ccc;
+        border-radius: 8px;
+        padding: 16px;
+        background: #fafafa;
+      }
+      #checkout-section { display: none; margin-top: 24px; border-top: 1px solid #ddd; padding-top: 24px; }
+      #checkout-section.open { display: block; }
+      #order-confirmation { display: none; margin-top: 16px; padding: 12px; background: #e6f4ea; border-radius: 6px; }
+      #order-confirmation.visible { display: block; }
+      label { display: block; margin-top: 12px; }
+      input { display: block; width: 100%; max-width: 320px; padding: 6px; margin-top: 4px; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <nav><strong>Fernway Goods</strong><span>Shop&nbsp;&nbsp;About&nbsp;&nbsp;Contact</span></nav>
+    </header>
+    <main>
+      <section class="products">
+        <div class="product" data-id="mug" data-price="14">
+          <h3>Ceramic Mug</h3>
+          <p>$14</p>
+          <button class="add-to-cart">Add to cart</button>
+        </div>
+        <div class="product" data-id="notebook" data-price="9">
+          <h3>Field Notebook</h3>
+          <p>$9</p>
+          <button class="add-to-cart">Add to cart</button>
+        </div>
+        <div class="product" data-id="tote" data-price="22">
+          <h3>Canvas Tote</h3>
+          <p>$22</p>
+          <button class="add-to-cart">Add to cart</button>
+        </div>
+      </section>
+
+      <button id="checkout-toggle" style="margin-top: 24px;">Checkout</button>
+
+      <section id="checkout-section">
+        <h3>Checkout</h3>
+        <form id="checkout-form">
+          <label>Name<input type="text" id="checkout-name" /></label>
+          <label>Email<input type="email" id="checkout-email" /></label>
+          <button type="submit" id="place-order">Place order</button>
+        </form>
+        <div id="order-confirmation">Order placed. Thanks for shopping with Fernway Goods.</div>
+      </section>
+    </main>
+
+    <aside class="cart-panel">
+      <strong>Cart</strong>
+      <div id="cart-count">0 items</div>
+      <div id="cart-subtotal">$0</div>
+    </aside>
+
+    <script>
+      var cart = [];
+
+      function renderCart() {
+        var count = cart.length;
+        var subtotal = cart.reduce(function (total, price) { return total + price; }, 0);
+        document.getElementById("cart-count").textContent = count + " items";
+        document.getElementById("cart-subtotal").textContent = "$" + subtotal;
+      }
+
+      document.querySelectorAll(".add-to-cart").forEach(function (button) {
+        button.addEventListener("click", function () {
+          var product = button.closest(".product");
+          cart.push(Number(product.getAttribute("data-price")));
+          renderCart();
+        });
+      });
+
+      document.getElementById("checkout-toggle").addEventListener("click", function () {
+        document.getElementById("checkout-section").classList.toggle("open");
+      });
+
+      // Bug: the form's actual id is "checkout-form" (hyphenated), but this
+      // looks up "checkoutForm" (camelCase) -- getElementById returns null,
+      // so addEventListener throws and the submit handler is never attached.
+      // Clicking "Place order" does nothing visible; the console shows
+      // "Cannot read properties of null (reading 'addEventListener')".
+      document.getElementById("checkoutForm").addEventListener("submit", function (event) {
+        event.preventDefault();
+        document.getElementById("order-confirmation").classList.add("visible");
+      });
+    </script>
+  </body>
+</html>

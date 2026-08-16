@@ -1,0 +1,9 @@
+{
+  "name": "olicode-browser-benchmark-fixture",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "bun test",
+    "build": "test -f index.html"
+  }
+}

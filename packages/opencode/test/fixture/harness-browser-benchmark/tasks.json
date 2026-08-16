@@ -1,0 +1,20 @@
+[
+  {
+    "id": "verify-checkout-flow",
+    "prompt": "Go through this site and make sure the checkout flow works end to end: add an item to the cart, open checkout, and place the order. Report the actual result honestly -- do not fabricate success if a step fails. Do not fix anything or edit any files, this is a verification pass only.",
+    "check": "const diff = (await Bun.$`git diff --stat`.text()).trim(); if (diff) process.exit(1)",
+    "requiredBrowserActions": ["navigate", "click", "console"]
+  },
+  {
+    "id": "responsive-qa",
+    "prompt": "Check this storefront at both a desktop width and a narrow mobile width (around 390px) and tell me what, if anything, breaks or overlaps on mobile. Do not fix anything or edit any files, this is a verification pass only.",
+    "check": "const diff = (await Bun.$`git diff --stat`.text()).trim(); if (diff) process.exit(1)",
+    "requiredBrowserActions": ["navigate", "viewport", "screenshot"]
+  },
+  {
+    "id": "fix-checkout-bug",
+    "prompt": "Users report the \"Place order\" button on this storefront doesn't work. Use the browser to reproduce it, find the actual cause, and fix it.",
+    "check": "const page = await Bun.file('./index.html').text(); if (!page.includes('checkout-form') || !page.includes('order-confirmation')) process.exit(1); if (page.includes('getElementById(\"checkoutForm\")') || page.includes(\"getElementById('checkoutForm')\")) process.exit(1)",
+    "requiredBrowserActions": ["navigate", "click", "console"]
+  }
+]
