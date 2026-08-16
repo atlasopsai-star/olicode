@@ -1297,6 +1297,12 @@ export const layer = Layer.effect(
         const slog = elog.with({ sessionID })
         let structured: unknown
         let step = 0
+        // Set for exactly one step after a tool call is denied permission
+        // (see the "blocked" handling below): strips every tool for that one
+        // step so the model gets a genuine final turn to explain what
+        // happened instead of the session going idle mid-tool-error with no
+        // response at all.
+        let forceWrapUp = false
         const timings: HarnessCore.LifecycleTimings = {
           contractMs: 0,
           worktreeMs: 0,
@@ -1585,8 +1591,11 @@ export const layer = Layer.effect(
               (part) => part.type === "text" && part.synthetic && part.text.includes("<olicode_proof_gate>"),
             )
             const modeTools = execution.mode === "design" ? HarnessCore.focusDesignTools(tools, activeMessages) : tools
-            const activeTools =
-              !correctingProof && HarnessCore.designEvidenceComplete(activeMessages, execution.contract)
+            const wrapUpOnly = forceWrapUp
+            forceWrapUp = false
+            const activeTools = wrapUpOnly
+              ? {}
+              : !correctingProof && HarnessCore.designEvidenceComplete(activeMessages, execution.contract)
                 ? {}
                 : requireShipPreflight && tools.ship
                   ? { ship: tools.ship }
@@ -1605,10 +1614,22 @@ export const layer = Layer.effect(
               sessionID,
               parentSessionID: session.parentID,
               system,
-              messages: [...modelMsgs, ...(isLastStep ? [{ role: "assistant" as const, content: MAX_STEPS }] : [])],
+              messages: [
+                ...modelMsgs,
+                ...(isLastStep ? [{ role: "assistant" as const, content: MAX_STEPS }] : []),
+                ...(wrapUpOnly
+                  ? [
+                      {
+                        role: "assistant" as const,
+                        content:
+                          "The last tool call was denied permission and will not be retried -- no tools are available this turn. Report what happened and what you completed before that point, then stop.",
+                      },
+                    ]
+                  : []),
+              ],
               tools: activeTools,
               model,
-              toolChoice: format.type === "json_schema" || requireShipPreflight ? "required" : undefined,
+              toolChoice: !wrapUpOnly && (format.type === "json_schema" || requireShipPreflight) ? "required" : undefined,
             })
             timings.modelAndToolsMs += performance.now() - modelStarted
 
@@ -1778,7 +1799,20 @@ export const layer = Layer.effect(
               }
             }
 
-            if (result === "stop") return "break" as const
+            if (result === "stop") {
+              // The processor returns "stop" both for a genuine message-level
+              // error and for a denied tool permission (SessionProcessor
+              // sets ctx.blocked, not ctx.assistantMessage.error, on denial).
+              // A hard error has nothing left to say; a denial does -- give
+              // it exactly one more step with zero tools available so the
+              // model reports what happened instead of the session going
+              // idle right after a bare tool-error with no response.
+              if (!wrapUpOnly && !handle.message.error) {
+                forceWrapUp = true
+                return "continue" as const
+              }
+              return "break" as const
+            }
             if (result === "compact") {
               yield* compaction.create({
                 sessionID,

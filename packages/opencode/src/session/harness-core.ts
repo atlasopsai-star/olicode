@@ -194,7 +194,21 @@ export function proof(
   if (screenshotWidths.some((width) => width >= 1000)) facts.add("wide-screenshot")
   if (screenshotWidths.some((width) => width <= 500)) facts.add("narrow-screenshot")
   if (browser.some((part) => part.state.input.action === "console")) facts.add("console")
-  const shipping = tools.filter((part) => part.tool === "ship")
+  // Include ship calls denied at the permission boundary, not just completed
+  // ones: a model that correctly attempted the requested commit/push/pr/
+  // deploy and was denied did exactly the right thing (the same reasoning
+  // OliBench's own grading already applies via shipAttempted) -- it should
+  // not be told the evidence is still missing and asked to try again.
+  const shipping = messages.flatMap((message) =>
+    message.parts.flatMap((part) =>
+      part.type === "tool" &&
+      part.tool === "ship" &&
+      (part.state.status === "completed" ||
+        (part.state.status === "error" && /rejected permission/i.test(part.state.error ?? "")))
+        ? [part]
+        : [],
+    ),
+  )
   if (shipping.some((part) => part.state.input.action === "preflight")) facts.add("git")
   if (shipping.some((part) => part.state.input.action === "commit")) facts.add("commit")
   if (shipping.some((part) => part.state.input.action === "push")) facts.add("push")

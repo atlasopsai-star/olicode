@@ -272,6 +272,64 @@ describe("harness core", () => {
     expect(result.missing).toEqual([])
   })
 
+  // Live-caught regression (OliBench SHIP lane, 2026-08-15): proof() only
+  // looked at completedTools(), which excludes an "error" tool part
+  // entirely -- so a ship(commit) denied at the permission boundary (the
+  // expected, correct outcome in a non-interactive run) counted as evidence
+  // never even attempted, and the harness kept demanding a commit that could
+  // never happen. Same reasoning OliBench's own grading already applies via
+  // shipAttempted: a model that called the right ship action and was denied
+  // did exactly the right thing.
+  test("a ship action denied at the permission boundary still satisfies its evidence requirement", () => {
+    const contract = SessionHarness.contract("Commit the changes with a conventional commit message.")
+    const result = HarnessCore.proof(
+      [
+        tool("shell", { command: "bun test" }, { exit: 0 }),
+        deniedTool("ship", { action: "commit", files: ["NOTES.md"], message: "docs: update notes" }),
+      ],
+      contract,
+    )
+    expect(result.satisfied).toContain("commit")
+    expect(result.missing).not.toContain("commit")
+  })
+
+  test("a ship action that failed for a reason other than permission denial still counts as missing", () => {
+    const contract = SessionHarness.contract("Commit the changes with a conventional commit message.")
+    const result = HarnessCore.proof(
+      [
+        tool("shell", { command: "bun test" }, { exit: 0 }),
+        {
+          info: {
+            id: MessageID.make("msg-core-fail"),
+            sessionID: SessionID.make("session-core"),
+            role: "user",
+            time: { created: 0 },
+            agent: "build",
+            model: { providerID: ProviderID.make("test"), modelID: ModelID.make("test") },
+          },
+          parts: [
+            {
+              id: PartID.make("prt-core-fail"),
+              messageID: MessageID.make("msg-core-fail"),
+              sessionID: SessionID.make("session-core"),
+              type: "tool",
+              callID: "call-core-fail",
+              tool: "ship",
+              state: {
+                status: "error",
+                input: { action: "commit", files: ["NOTES.md"], message: "docs: update notes" },
+                error: "git commit failed: nothing to commit",
+                time: { start: 0, end: 1 },
+              },
+            },
+          ],
+        } as MessageV2.WithParts,
+      ],
+      contract,
+    )
+    expect(result.missing).toContain("commit")
+  })
+
   test("raw shell shipping commands do not satisfy deterministic ship proof", () => {
     const contract = SessionHarness.contract("Run tests and a shipping preflight. Do not commit, push, or deploy.")
     const result = HarnessCore.proof(
