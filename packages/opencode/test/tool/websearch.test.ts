@@ -36,11 +36,17 @@ describe("websearch provider", () => {
     expect(selectWebSearchProvider(SESSION_ID, { exa: false, parallel: true })).toBe("parallel")
   })
 
-  test("is only enabled for opencode or explicit websearch provider flags", () => {
-    expect(webSearchEnabled(ProviderID.opencode, { exa: false, parallel: false })).toBe(true)
-    expect(webSearchEnabled(ProviderID.openai, { exa: false, parallel: false })).toBe(false)
-    expect(webSearchEnabled(ProviderID.openai, { exa: true, parallel: false })).toBe(true)
-    expect(webSearchEnabled(ProviderID.openai, { exa: false, parallel: true })).toBe(true)
+  // Live-caught (2026-08-16): both mcp-websearch endpoints are public and
+  // keyless (no EXA_API_KEY/PARALLEL_API_KEY required), so gating on
+  // provider === "opencode" or an explicit flag left every other provider
+  // with no search tool at all -- confirmed on a real research task that
+  // repeatedly guessed URLs via webfetch and hit the same 404 twice.
+  test("is enabled by default for any provider, opt-out only", () => {
+    expect(webSearchEnabled(ProviderID.opencode)).toBe(true)
+    expect(webSearchEnabled(ProviderID.openai)).toBe(true)
+    expect(webSearchEnabled(ProviderID.openai, { disabled: false })).toBe(true)
+    expect(webSearchEnabled(ProviderID.openai, { disabled: true })).toBe(false)
+    expect(webSearchEnabled(ProviderID.opencode, { disabled: true })).toBe(false)
   })
 
   test("uses branded labels", () => {

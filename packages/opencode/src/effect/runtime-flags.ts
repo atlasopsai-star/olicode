@@ -21,6 +21,15 @@ export class Service extends ConfigService.Service<Service>()("@opencode/Runtime
   disableEmbeddedWebUi: bool("OPENCODE_DISABLE_EMBEDDED_WEB_UI"),
   disableExternalSkills: bool("OPENCODE_DISABLE_EXTERNAL_SKILLS"),
   disableLspDownload: bool("OPENCODE_DISABLE_LSP_DOWNLOAD"),
+  // Live-caught (2026-08-16): websearch hits public, keyless MCP endpoints
+  // (mcp.exa.ai, search.parallel.ai -- no EXA_API_KEY/PARALLEL_API_KEY
+  // required, verified in mcp-websearch.ts) but was gated behind an
+  // opt-in flag, defaulting to hidden for any provider other than the
+  // bundled "opencode" one. A real research task on a non-opencode
+  // provider had no search tool at all and repeatedly guessed URLs via
+  // webfetch instead, hitting the same 404 twice in a row. No cost or
+  // credential barrier to having it on by default; opt out if needed.
+  disableWebsearch: bool("OPENCODE_DISABLE_WEBSEARCH"),
   skipMigrations: bool("OPENCODE_SKIP_MIGRATIONS"),
   disableClaudeCodePrompt: Config.all({
     broad: bool("OPENCODE_DISABLE_CLAUDE_CODE"),

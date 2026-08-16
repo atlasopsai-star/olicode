@@ -61,8 +61,13 @@ import { SessionHarness, type Execution } from "@/session/harness"
 
 const log = Log.create({ service: "tool.registry" })
 
-export function webSearchEnabled(providerID: ProviderID, flags = { exa: false, parallel: false }) {
-  return providerID === ProviderID.opencode || flags.exa || flags.parallel
+// Live-caught (2026-08-16): this used to require providerID === "opencode"
+// or an explicit experimental flag, so any user on their own OpenAI/
+// Anthropic/etc auth got no search tool at all -- both mcp-websearch
+// endpoints are public and keyless, so there's no cost/credential reason
+// to withhold it by default. OPENCODE_DISABLE_WEBSEARCH opts back out.
+export function webSearchEnabled(_providerID: ProviderID, flags: { disabled?: boolean } = {}) {
+  return !flags.disabled
 }
 
 export function visibleForExecution(toolID: string, execution?: Execution) {
@@ -373,7 +378,7 @@ export const layer: Layer.Layer<
         )
           return false
         if (tool.id === WebSearchTool.id) {
-          return webSearchEnabled(input.providerID, { exa: flags.enableExa, parallel: flags.enableParallel })
+          return webSearchEnabled(input.providerID, { disabled: flags.disableWebsearch })
         }
 
         const usePatch =
