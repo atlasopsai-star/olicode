@@ -70,6 +70,20 @@ function deniedTool(name: string, input: Record<string, unknown>) {
 }
 
 describe("harness core", () => {
+  test("design implementation drops discovery tools after the first mutation", () => {
+    const tools = Object.fromEntries(
+      ["bash", "read", "glob", "grep", "task", "webfetch", "todowrite", "skill", "apply_patch", "browser"].map(
+        (name) => [name, name],
+      ),
+    )
+    expect(Object.keys(HarnessCore.focusDesignTools(tools, [tool("read", { filePath: "/repo/index.html" })]))).toEqual(
+      Object.keys(tools),
+    )
+    expect(
+      Object.keys(HarnessCore.focusDesignTools(tools, [tool("apply_patch", { patchText: "update index.html" })])),
+    ).toEqual(["bash", "read", "apply_patch", "browser"])
+  })
+
   test("proof gate stops after change, validation, and clean scope evidence", () => {
     const filePath = "/repo/src/button.ts"
     const result = HarnessCore.proof(
@@ -169,6 +183,50 @@ describe("harness core", () => {
         contract,
       ).stop,
     ).toBe(true)
+  })
+
+  test("DESIGN classifies its saved browser screenshots as verification evidence", () => {
+    const contract = SessionHarness.contract("Redesign index.html and capture wide and narrow screenshots")
+    const screenshot = "/repo/artifacts/wide.png"
+    const result = HarnessCore.proof(
+      [
+        tool("read", { filePath: "/repo/index.html" }),
+        tool("apply_patch", { patchText: "update index.html" }, { files: [{ filePath: "/repo/index.html" }] }),
+        tool("bash", { command: "bun run build" }, { exit: 0 }),
+        tool("browser", { action: "navigate", url: "file:///repo/index.html" }),
+        tool("browser", { action: "viewport", width: 1440, height: 900 }),
+        tool("browser", { action: "screenshot", path: screenshot }),
+        tool("browser", { action: "viewport", width: 390, height: 844 }),
+        tool("browser", { action: "screenshot" }),
+        tool("browser", { action: "console" }),
+      ],
+      contract,
+      [],
+      [screenshot],
+    )
+    expect(result.scope).toContainEqual({
+      file: screenshot,
+      classification: "VERIFICATION",
+      reason: "The file is a required browser screenshot from this design task.",
+    })
+    expect(result.stop).toBe(true)
+  })
+
+  test("DESIGN stops exposing tools once required evidence is complete", () => {
+    const contract = SessionHarness.contract("Redesign index.html and capture wide and narrow screenshots")
+    const messages = [
+      tool("read", { filePath: "/repo/index.html" }),
+      tool("apply_patch", { patchText: "update index.html" }, { files: [{ filePath: "/repo/index.html" }] }),
+      tool("bash", { command: "bun run build" }, { exit: 0 }),
+      tool("browser", { action: "navigate", url: "file:///repo/index.html" }),
+      tool("browser", { action: "viewport", width: 1440, height: 900 }),
+      tool("browser", { action: "screenshot" }),
+      tool("browser", { action: "viewport", width: 390, height: 844 }),
+      tool("browser", { action: "screenshot" }),
+      tool("browser", { action: "console" }),
+    ]
+    expect(HarnessCore.designEvidenceComplete(messages, contract)).toBe(true)
+    expect(HarnessCore.designEvidenceComplete(messages.slice(0, -1), contract)).toBe(false)
   })
 
   // Live-caught regression: after gathering full design evidence, the model

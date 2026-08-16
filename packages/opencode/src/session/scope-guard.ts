@@ -91,9 +91,25 @@ export function scan(messages: MessageV2.WithParts[]): Report {
 }
 
 export function postDiff(messages: MessageV2.WithParts[], contract: OliTaskContract, workspaceFiles: string[] = []) {
+  const screenshots = messages.flatMap((message) =>
+    message.parts.flatMap((part) =>
+      part.type === "tool" &&
+      part.tool === "browser" &&
+      part.state.status === "completed" &&
+      part.state.input.action === "screenshot" &&
+      typeof part.state.input.path === "string" &&
+      part.state.input.path
+        ? [normalized(part.state.input.path)]
+        : [],
+    ),
+  )
   return [...new Set([...scan(messages).edited, ...workspaceFiles])].map((file) => ({
     file,
-    ...classifyFile(file, contract),
+    ...(contract.rigor === "DESIGN" &&
+    contract.requiredEvidence.some((item) => item.id === "wide-screenshot" || item.id === "narrow-screenshot") &&
+    screenshots.some((item) => normalized(file) === item || normalized(file).endsWith(`/${item}`))
+      ? { classification: "VERIFICATION" as const, reason: "The file is a required browser screenshot from this design task." }
+      : classifyFile(file, contract)),
   }))
 }
 

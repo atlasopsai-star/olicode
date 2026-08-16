@@ -166,7 +166,7 @@ export function checklist(active: Contract) {
     ...active.avoidPatterns.map((item) => `- ${item}`),
     ...active.responsiveRequirements.map((item) => `- ${item}`),
     ...active.accessibilityRequirements.map((item) => `- ${item}`),
-    "The desktop screenshot, mobile screenshot, and console check are required completion evidence, not scratch build output -- do not delete or clean them up. Leave them in place for the verification step.",
+    "The desktop screenshot, mobile screenshot, and console check are required completion evidence. Omit the browser screenshot path to inspect each image inline. Save one only when the user explicitly requested an artifact, use a workspace-relative path, and do not delete verification artifacts before completion.",
     "Before finishing: could this result belong to 100 unrelated AI-generated products? If yes, it needs a more specific, deliberate identity, not more polish on the generic version.",
     "</olicode_design_contract>",
   ].join("\n")

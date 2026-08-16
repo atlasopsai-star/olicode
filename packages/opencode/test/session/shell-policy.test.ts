@@ -19,6 +19,7 @@ describe("shell policy", () => {
       "which node",
       "whoami",
       "wc -l src/ui.ts",
+      "test -f index.html",
     ])
       expect(ShellPolicy.classify(command)).toBe("READ_ONLY")
   })

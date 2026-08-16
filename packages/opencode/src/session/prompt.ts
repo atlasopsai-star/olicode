@@ -1581,7 +1581,16 @@ export const layer = Layer.effect(
             if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
             const requireShipPreflight =
               execution.mode === "ship" && !HarnessCore.hasCompletedToolAction(activeMessages, "ship", "preflight")
-            const activeTools = requireShipPreflight && tools.ship ? { ship: tools.ship } : tools
+            const correctingProof = lastUserMsg?.parts.some(
+              (part) => part.type === "text" && part.synthetic && part.text.includes("<olicode_proof_gate>"),
+            )
+            const modeTools = execution.mode === "design" ? HarnessCore.focusDesignTools(tools, activeMessages) : tools
+            const activeTools =
+              !correctingProof && HarnessCore.designEvidenceComplete(activeMessages, execution.contract)
+                ? {}
+                : requireShipPreflight && tools.ship
+                  ? { ship: tools.ship }
+                  : modeTools
             contextTelemetry.systemPromptChars += system.reduce((total, item) => total + item.length, 0)
             contextTelemetry.toolSurfaceChars += JSON.stringify(activeTools, (_key, value) =>
               typeof value === "function" ? undefined : value,

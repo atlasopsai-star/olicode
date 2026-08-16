@@ -4,6 +4,6 @@
   "type": "module",
   "scripts": {
     "test": "bun test",
-    "build": "bun -e \"if (!(await Bun.file('index.html').exists())) process.exit(1)\""
+    "build": "test -f index.html"
   }
 }

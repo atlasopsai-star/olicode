@@ -7,7 +7,7 @@ Actions:
 - snapshot: re-read the current page's interactive elements without navigating.
 - click: click the element at "index".
 - type: fill the element at "index" with "value".
-- screenshot: capture the current page as an image. Pass "path" to save it to a file instead of returning it inline.
+- screenshot: capture the current page as an image. Omit "path" when you need to visually inspect it inline. To save it, use a workspace-relative path; paths outside the active workspace are rejected.
 - viewport: set the page viewport using "width" and "height" before responsive screenshots.
 - text: return the page's visible text content, truncated.
 - console: return recent console messages and page errors.

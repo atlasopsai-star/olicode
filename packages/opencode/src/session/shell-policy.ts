@@ -17,6 +17,7 @@ const READ_ONLY = new Set([
   "pwd",
   "rg",
   "tail",
+  "test",
   "wc",
   "which",
   "whoami",

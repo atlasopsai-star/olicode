@@ -583,7 +583,9 @@ it.instance("loop injects OliCode harness guidance for focused browser tasks", (
     const payload = JSON.stringify(hit?.body ?? {})
     expect(payload).toContain("Action: browser")
     expect(payload).toContain("Rigor: BROWSER")
-    expect(payload).toContain("Verify the acceptance criteria and changed-file scope before finishing.")
+    expect(payload).toContain(
+      "Run the cheapest sufficient validation. Changed-file scope is enforced automatically at completion; do not spend a tool call rechecking it.",
+    )
   }),
 )
 

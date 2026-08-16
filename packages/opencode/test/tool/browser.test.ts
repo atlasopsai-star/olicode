@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { resolveUrl } from "../../src/tool/browser"
+import { resolveScreenshotPath, resolveUrl } from "../../src/tool/browser"
 
 describe("browser resolveUrl", () => {
   test("assumes https for a bare hostname", () => {
@@ -16,5 +16,16 @@ describe("browser resolveUrl", () => {
 
   test("leaves a file:// URL alone", () => {
     expect(resolveUrl("file:///tmp/index.html")).toBe("file:///tmp/index.html")
+  })
+})
+
+describe("browser resolveScreenshotPath", () => {
+  test("keeps relative screenshots in the active workspace", () => {
+    expect(resolveScreenshotPath("/repo", "artifacts/wide.png")).toBe("/repo/artifacts/wide.png")
+  })
+
+  test("rejects screenshot writes outside the active workspace", () => {
+    expect(() => resolveScreenshotPath("/repo", "/tmp/wide.png")).toThrow("inside the active workspace")
+    expect(() => resolveScreenshotPath("/repo", "../wide.png")).toThrow("inside the active workspace")
   })
 })

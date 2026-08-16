@@ -219,6 +219,17 @@ export function hasCompletedToolAction(messages: MessageV2.WithParts[], tool: st
   return completedTools(messages).some((part) => part.tool === tool && part.state.input.action === action)
 }
 
+export function focusDesignTools<T>(tools: Record<string, T>, messages: MessageV2.WithParts[]) {
+  if (!completedTools(messages).some((part) => ["edit", "write", "apply_patch"].includes(part.tool))) return tools
+  return Object.fromEntries(
+    Object.entries(tools).filter(([name]) => ["bash", "read", "edit", "write", "apply_patch", "browser"].includes(name)),
+  )
+}
+
+export function designEvidenceComplete(messages: MessageV2.WithParts[], contract: OliTaskContract) {
+  return contract.rigor === "DESIGN" && proof(messages, contract).missing.length === 0
+}
+
 export function rollbackCandidates(messages: MessageV2.WithParts[], result: Proof) {
   const tools = completedTools(messages)
   return result.scope.flatMap((item) => {

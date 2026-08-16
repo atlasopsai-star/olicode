@@ -30,8 +30,10 @@ const tasks = JSON.parse(readFileSync(path.join(fixture, "tasks.json"), "utf8"))
 async function command(args: string[], cwd: string, env: Record<string, string> = {}, timeout?: number) {
   const started = performance.now()
   const logs = mkdtempSync(path.join(os.tmpdir(), "olibench-command-"))
-  const stdout = Bun.file(path.join(logs, "stdout"))
-  const stderr = Bun.file(path.join(logs, "stderr"))
+  const stdoutPath = path.join(logs, "stdout")
+  const stderrPath = path.join(logs, "stderr")
+  const stdout = Bun.file(stdoutPath)
+  const stderr = Bun.file(stderrPath)
   const child = Bun.spawn(args, {
     cwd,
     env: { ...globalThis.process.env, ...env },
@@ -50,13 +52,19 @@ async function command(args: string[], cwd: string, env: Record<string, string> 
     ? new Promise<{ stdout: string; stderr: string; exitCode: number }>((resolve) =>
         (timer = setTimeout(() => {
           timedOut = true
-          resolve({ stdout: "", stderr: `Command timed out after ${timeout}ms`, exitCode: 124 })
           child.kill("SIGKILL")
           try {
             process.kill(-child.pid, "SIGKILL")
           } catch {
             // The direct child may have exited while a descendant kept an output handle open.
           }
+          resolve({
+            stdout: readFileSync(stdoutPath, "utf8"),
+            stderr: [readFileSync(stderrPath, "utf8"), `Command timed out after ${timeout}ms`]
+              .filter(Boolean)
+              .join("\n"),
+            exitCode: 124,
+          })
         }, timeout).unref()),
       )
     : undefined
@@ -69,7 +77,10 @@ async function command(args: string[], cwd: string, env: Record<string, string> 
 async function capture(directory: string, task: string, variant: string, trial: number) {
   if (!existsSync(path.join(directory, "index.html"))) return { screenshots: [] as string[], consoleErrors: [] as string[] }
   const { chromium } = await import("playwright")
-  const browser = await chromium.launch({ channel: "chrome", headless: true }).catch(() => chromium.launch({ headless: true }))
+  const chrome = process.platform === "darwin" ? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" : undefined
+  const browser = await chromium
+    .launch({ ...(chrome && existsSync(chrome) ? { executablePath: chrome } : { channel: "chrome" }), headless: true })
+    .catch(() => chromium.launch({ headless: true }))
   const page = await browser.newPage()
   const consoleErrors: string[] = []
   page.on("console", (message) => {
@@ -115,6 +126,7 @@ function metrics(...outputs: string[]) {
   const tools = new Map<string, Record<string, unknown>>()
   const steps = new Map<string, Record<string, unknown>>()
   const harness = new Map<string, Record<string, unknown>>()
+  const providerErrors: unknown[] = []
   const seen = new Set<object>()
   const visit = (value: unknown) => {
     if (!value || typeof value !== "object" || seen.has(value)) return
@@ -127,6 +139,7 @@ function metrics(...outputs: string[]) {
     if (item.type === "tool" && typeof item.callID === "string") tools.set(item.callID, item)
     if (item.type === "step-finish" && typeof item.id === "string") steps.set(item.id, item)
     if (item.type === "harness" && typeof item.id === "string") harness.set(item.id, item)
+    if (item.type === "error") providerErrors.push(item.error)
     Object.values(item).forEach(visit)
   }
   events.forEach(visit)
@@ -134,6 +147,9 @@ function metrics(...outputs: string[]) {
   const completed = [...tools.values()].filter(
     (item) =>
       item.state && typeof item.state === "object" && (item.state as Record<string, unknown>).status === "completed",
+  )
+  const failedTools = [...tools.values()].filter(
+    (item) => item.state && typeof item.state === "object" && (item.state as Record<string, unknown>).status === "error",
   )
   const tokens = [...steps.values()].map((item) => item.tokens as Record<string, unknown>)
   const number = (value: unknown) => (typeof value === "number" ? value : 0)
@@ -161,6 +177,17 @@ function metrics(...outputs: string[]) {
       input:
         item.state && typeof item.state === "object"
           ? (item.state as Record<string, unknown>).input
+          : undefined,
+    })),
+    failedToolTrace: failedTools.map((item) => ({
+      tool: typeof item.tool === "string" ? item.tool : "unknown",
+      input:
+        item.state && typeof item.state === "object"
+          ? (item.state as Record<string, unknown>).input
+          : undefined,
+      error:
+        item.state && typeof item.state === "object"
+          ? (item.state as Record<string, unknown>).error
           : undefined,
     })),
     browserActions: completed
@@ -199,6 +226,16 @@ function metrics(...outputs: string[]) {
       harnessRecords.filter((item) => item.kind === "proof").length > 1
         ? harnessRecords.filter((item) => item.kind === "proof").length - 1
         : 0,
+    proofDecisions: harnessRecords
+      .filter((item) => item.kind === "proof")
+      .map((item) => item.data),
+    completionDecisions: harnessRecords
+      .filter((item) => item.kind === "completion")
+      .map((item) => item.data),
+    completionPassed: harnessRecords.some(
+      (item) => item.kind === "completion" && (item.data as Record<string, unknown>)?.decision === "STOP",
+    ),
+    providerErrors,
     scopeViolations: harnessRecords.filter(
       (item) => item.kind === "completion" && JSON.stringify(item.data).includes("UNRELATED"),
     ).length,
@@ -249,7 +286,12 @@ for (const task of tasks) {
     if (variantFilter && variant !== variantFilter) continue
     for (let trial = 1; trial <= runs; trial++) {
       const directory = mkdtempSync(path.join(os.tmpdir(), `olibench-${task.id}-${variant}-`))
+      const database = mkdtempSync(path.join(os.tmpdir(), "olibench-db-"))
       try {
+        const benchEnv = {
+          OLICODE_HARNESS: variant === "olicode" ? "1" : "0",
+          OPENCODE_DB: path.join(database, "olibench.db"),
+        }
         cpSync(fixture, directory, { recursive: true })
         await command(["git", "init", "-q"], directory, {}, auxiliaryTimeout)
         await command(["git", "add", "."], directory, {}, auxiliaryTimeout)
@@ -274,7 +316,7 @@ for (const task of tasks) {
             task.prompt,
           ],
           path.resolve(import.meta.dir, ".."),
-          { OLICODE_HARNESS: variant === "olicode" ? "1" : "0" },
+          benchEnv,
           runTimeout,
         )
         const sessionID = parseEvents(run.stdout)
@@ -284,14 +326,17 @@ for (const task of tasks) {
           ? await command(
               ["bun", "run", "src/index.ts", "export", sessionID],
               path.resolve(import.meta.dir, ".."),
-              {},
+              benchEnv,
               auxiliaryTimeout,
             )
           : undefined
         const verification = await command(["bun", "test"], directory, {}, auxiliaryTimeout)
         const acceptance = await command(["bun", "-e", task.check], directory, {}, auxiliaryTimeout)
         const diff = await command(["git", "diff", "--numstat"], directory, {}, auxiliaryTimeout)
-        const visual = await capture(directory, task.id, variant, trial)
+        const visual = await capture(directory, task.id, variant, trial).catch((error) => ({
+          screenshots: [] as string[],
+          consoleErrors: [`Visual capture unavailable: ${String(error)}`],
+        }))
         const changed = diff.stdout.trim().split("\n").filter(Boolean)
         const observed = metrics(run.stdout, exported?.stdout ?? "")
         const telemetryCaptured = variant === "stock" || exported?.exitCode === 0
@@ -317,6 +362,7 @@ for (const task of tasks) {
             requiredEvidencePassed &&
             observed.scopeViolations === 0 &&
             observed.unsupportedCompletionClaims === 0 &&
+            (variant === "stock" || observed.completionPassed) &&
             telemetryCaptured,
           timedOut: run.timedOut,
           wallMilliseconds: Math.round(run.milliseconds),
@@ -333,7 +379,12 @@ for (const task of tasks) {
             acceptanceMilliseconds: Math.round(acceptance.milliseconds),
             diffMilliseconds: Math.round(diff.milliseconds),
           },
-          error: run.exitCode === 0 ? undefined : run.stderr.trim().slice(-1000),
+          error:
+            run.exitCode !== 0
+              ? run.stderr.trim().slice(-1000)
+              : observed.providerErrors.length
+                ? JSON.stringify(observed.providerErrors.at(-1)).slice(-1000)
+                : undefined,
         })
         await Bun.write(
           output,
@@ -350,6 +401,7 @@ for (const task of tasks) {
         )
       } finally {
         rmSync(directory, { recursive: true, force: true })
+        rmSync(database, { recursive: true, force: true })
       }
     }
   }

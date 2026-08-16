@@ -19,6 +19,14 @@ export function resolveUrl(input: string): string {
   return /^[a-z][a-z0-9+.-]*:\/\//i.test(input) ? input : `https://${input}`
 }
 
+export function resolveScreenshotPath(directory: string, input: string): string {
+  const target = path.resolve(directory, input)
+  const relative = path.relative(directory, target)
+  if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative))
+    throw new Error("Screenshot paths must stay inside the active workspace. Use a relative path or omit path for inline review.")
+  return target
+}
+
 export const Parameters = Schema.Struct({
   action: Schema.Literals([
     "navigate",
@@ -38,7 +46,7 @@ export const Parameters = Schema.Struct({
   }),
   value: Schema.optional(Schema.String).annotate({ description: "Text to fill into the element (action: type)" }),
   path: Schema.optional(Schema.String).annotate({
-    description: "Save the screenshot to this file path instead of returning it inline (action: screenshot)",
+    description: "Optional workspace-relative path to save the screenshot instead of returning it inline (action: screenshot)",
   }),
   width: Schema.optional(Schema.Number).annotate({ description: "Viewport width in pixels (action: viewport)" }),
   height: Schema.optional(Schema.Number).annotate({ description: "Viewport height in pixels (action: viewport)" }),
@@ -193,7 +201,7 @@ export const BrowserTool = Tool.define<typeof Parameters, Metadata, BrowserSessi
           const screenshotPath = yield* Effect.gen(function* () {
             if (params.action !== "screenshot" || !params.path) return undefined
             const instance = yield* InstanceState.context
-            return path.isAbsolute(params.path) ? params.path : path.join(instance.directory, params.path)
+            return resolveScreenshotPath(instance.directory, params.path)
           })
 
           return yield* session.run(ctx.sessionID, (page) => perform(page, params, screenshotPath))
