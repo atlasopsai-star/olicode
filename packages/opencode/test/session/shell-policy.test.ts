@@ -27,8 +27,21 @@ describe("shell policy", () => {
       "open https://github.com",
       "open .",
       "xdg-open https://github.com",
+      // Live-caught alongside "open": denied in the same non-interactive
+      // run. A version check never mutates anything regardless of tool.
+      "bun --version",
+      "node --version",
+      "npm --version",
+      "git --version",
+      "go version",
+      "cargo --version",
     ])
       expect(ShellPolicy.classify(command)).toBe("READ_ONLY")
+  })
+
+  test("does not blanket-allow node/bun/npm beyond version checks and known-safe subcommands", () => {
+    expect(ShellPolicy.classify("node script.js")).not.toBe("READ_ONLY")
+    expect(ShellPolicy.classify("node -e \"require('fs').rmSync('x')\"")).not.toBe("READ_ONLY")
   })
 
   test("detects expected mutations", () => {

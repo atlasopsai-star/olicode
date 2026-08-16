@@ -36,6 +36,11 @@ const READ_ONLY = new Set([
   // a request that should be instant look like a hang.
   "open",
   "xdg-open",
+  // A version check never mutates anything; gated to --version/-v/-V below
+  // like bun/npm/etc, not blanket-allowed (arbitrary `node script.js` isn't
+  // safe to auto-run). Live-caught: "node --version" and "bun --version"
+  // were denied in a non-interactive run alongside the same "open" bug.
+  "node",
 ])
 
 const MUTATION =
@@ -43,6 +48,9 @@ const MUTATION =
 const DESTRUCTIVE = /(?:^|[;&|]\s*)rm\b|\bgit\s+(?:checkout|restore|reset)\b/i
 const INSTALL = /\b(?:bun|npm|pnpm|yarn)\s+(?:add|install|i)\b|\b(?:pip|uv)\s+install\b|\bcargo\s+add\b/i
 const READ_GIT = /\bgit\s+(?:status|diff|show|log|branch|rev-parse|ls-files)\b/i
+// Live-caught alongside "open": "bun --version"/"node --version" were also
+// denied. A version check never mutates anything regardless of tool.
+const VERSION_CHECK = /(?:^|\s)(?:--version|-v|-V)(?:\s|$)/
 
 export function classify(command: string): ShellMutation {
   if (DESTRUCTIVE.test(command)) return "DESTRUCTIVE"
@@ -56,11 +64,12 @@ export function classify(command: string): ShellMutation {
     segments.every((segment) => {
       const executable = segment.match(/^(?:[A-Z_][A-Z0-9_]*=[^\s]+\s+)*([\w.-]+)/i)?.[1]?.toLowerCase()
       if (!executable || !READ_ONLY.has(executable)) return false
-      if (executable === "git") return READ_GIT.test(segment)
+      if (executable === "node") return VERSION_CHECK.test(segment)
+      if (executable === "git") return READ_GIT.test(segment) || VERSION_CHECK.test(segment)
       if (["bun", "npm", "pnpm", "yarn"].includes(executable))
-        return /\b(?:test|typecheck|lint|build|run)\b/i.test(segment)
-      if (executable === "cargo") return /\b(?:test|check|build|clippy)\b/i.test(segment)
-      if (executable === "go") return /\b(?:test|build|vet)\b/i.test(segment)
+        return /\b(?:test|typecheck|lint|build|run)\b/i.test(segment) || VERSION_CHECK.test(segment)
+      if (executable === "cargo") return /\b(?:test|check|build|clippy)\b/i.test(segment) || VERSION_CHECK.test(segment)
+      if (executable === "go") return /\b(?:test|build|vet|version)\b/i.test(segment)
       return true
     })
   )
