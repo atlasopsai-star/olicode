@@ -156,11 +156,20 @@ export function rigor(query: string, selected = action(query)): RigorLevel {
   return "STANDARD"
 }
 
+const NEGATION = /\b(?:do not|don't|never|without)\b/i
+
 function evidence(query: string, selected: Action, level: RigorLevel): EvidenceRequirement[] {
   if (selected === "answer" || selected === "inspect" || selected === "research") return []
-  const requested = sentences(query)
-    .filter((item) => !/\b(?:do not|don't|never|without)\b/i.test(item))
-    .join(" ")
+  const allSentences = sentences(query)
+  const requested = allSentences.filter((item) => !NEGATION.test(item)).join(" ")
+  // A trigger word can appear in one sentence while its negation sits in a
+  // separate trailing sentence ("...ready to deploy. Do not deploy.") --
+  // the sentence-scoped filter above never connects the two, so it demands
+  // evidence for an action the prompt explicitly forbids. Check negation
+  // across every sentence that mentions the same action, not just the one
+  // the trigger word happened to land in.
+  const negatedSentences = allSentences.filter((item) => NEGATION.test(item))
+  const isNegated = (pattern: RegExp) => negatedSentences.some((item) => pattern.test(item))
   const base: EvidenceRequirement[] = [
     { id: "change", description: "The requested change is present." },
     { id: "validation", description: "A targeted validation completed successfully." },
@@ -186,26 +195,32 @@ function evidence(query: string, selected: Action, level: RigorLevel): EvidenceR
       { id: "console", description: "The rendered page console was inspected." },
     ]
   if (level === "BROWSER") return [{ id: "browser", description: "The requested browser assertions passed." }]
-  if (level === "SHIP")
-    return [
-      { id: "scope", description: "Every changed file is relevant to the task contract." },
-      { id: "tests", description: "Required tests passed." },
-      ...(/\bcommit\b/i.test(requested) ? [{ id: "commit" as const, description: "The requested commit was created." }] : []),
-      ...(/\bpush\b/i.test(requested) ? [{ id: "push" as const, description: "The requested branch was pushed." }] : []),
-      ...(/\b(?:pull request|\bpr\b)/i.test(requested)
+  if (level === "SHIP") {
+    const shipActions: EvidenceRequirement[] = [
+      ...(/\bcommit\b/i.test(requested) && !isNegated(/\bcommit\b/i)
+        ? [{ id: "commit" as const, description: "The requested commit was created." }]
+        : []),
+      ...(/\bpush\b/i.test(requested) && !isNegated(/\bpush\b/i)
+        ? [{ id: "push" as const, description: "The requested branch was pushed." }]
+        : []),
+      ...(/\b(?:pull request|\bpr\b)/i.test(requested) && !isNegated(/\b(?:pull request|\bpr\b)/i)
         ? [{ id: "pr" as const, description: "The requested pull request was created and returned a URL." }]
         : []),
-      ...(/\bdeploy|vercel\b/i.test(requested)
+      ...(/\bdeploy|vercel\b/i.test(requested) && !isNegated(/\bdeploy|vercel\b/i)
         ? [
             { id: "deploy" as const, description: "The requested deployment returned a URL." },
             { id: "browser" as const, description: "The deployed URL was verified in the browser." },
             { id: "console" as const, description: "The deployed page console was inspected." },
           ]
         : []),
-      ...(!/\b(?:commit|push|pull request|\bpr\b|deploy|vercel)\b/i.test(requested)
-        ? [{ id: "git" as const, description: "Git shipping readiness was inspected." }]
-        : []),
     ]
+    return [
+      { id: "scope", description: "Every changed file is relevant to the task contract." },
+      { id: "tests", description: "Required tests passed." },
+      ...shipActions,
+      ...(shipActions.length === 0 ? [{ id: "git" as const, description: "Git shipping readiness was inspected." }] : []),
+    ]
+  }
   const standard: EvidenceRequirement[] = [
     ...base,
     { id: "tests", description: "Relevant tests or type checks passed." },

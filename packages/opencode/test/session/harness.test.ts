@@ -160,6 +160,26 @@ describe("session.harness", () => {
     expect(contract.budgets.expectedFiles).toBe(0)
   })
 
+  // Live-caught regression (OliBench SHIP lane, 2026-08-15): negation
+  // detection was sentence-scoped, so a prompt that names the action once
+  // descriptively ("...ready for a Vercel preview deploy") and forbids it
+  // in a separate trailing sentence ("Do not ... deploy.") still demanded
+  // deploy/browser/console evidence that could never be satisfied, and the
+  // harness blocked completion forever. Same bug hit "pull request" /
+  // "commit message" phrasing landing in a different sentence than the
+  // "Do not commit, push, open a PR" prohibition.
+  test("negation in a separate sentence still suppresses required proof", () => {
+    const deployReadiness = SessionHarness.contract(
+      "Run a shipping preflight and tell me whether this project is ready for a Vercel preview deploy. Do not commit, push, open a PR, or deploy.",
+    )
+    expect(deployReadiness.requiredEvidence.map((item) => item.id)).toEqual(["scope", "tests", "git"])
+
+    const prPreparation = SessionHarness.contract(
+      "Prepare this project for a pull request: update NOTES.md and draft a clear conventional commit message. Do not commit, push, open a PR, or deploy -- preparation only.",
+    )
+    expect(prPreparation.requiredEvidence.map((item) => item.id)).toEqual(["scope", "tests", "git"])
+  })
+
   test("routes every basic shipping phrase to the ship action", () => {
     for (const query of [
       "commit this",
