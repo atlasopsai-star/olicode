@@ -81,6 +81,10 @@ import { QuestionPrompt } from "./question"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
 import * as Model from "../../util/model"
 import { formatTranscript } from "../../util/transcript"
+import { useGamification } from "../../context/gamification"
+import { getGitBranch, getGitStatus } from "../../util/git"
+import { bar } from "../../util/format"
+import { ExecutionContractView, ExecutionPlanView, SessionTabs, type WorkspaceTab } from "../../component/session-tabs"
 import { UI } from "@/cli/ui.ts"
 import { useTuiConfig } from "../../context/tui-config"
 import { nextThinkingMode, reasoningSummary, useThinkingMode, type ThinkingMode } from "../../context/thinking"
@@ -92,7 +96,6 @@ import { SessionRetry } from "@/session/retry"
 import { getRevertDiffFiles } from "../../util/revert-diff"
 import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut, useOpencodeKeymap } from "../../keymap"
 import { PathFormatterProvider, usePathFormatter } from "../../context/path-format"
-import { OliCodeStatus, OliCodeWordmark } from "../../component/olicode-brand"
 
 addDefaultParsers(parsers.parsers)
 
@@ -182,7 +185,7 @@ function SessionStatsBar(props: { sessionID: string }) {
   const { theme } = useTheme()
   const sync = useSync()
   const local = useLocal()
-  const dimensions = useTerminalDimensions()
+  const gami = useGamification()
 
   const [elapsed, setElapsed] = createSignal("00:00:00")
   const session = createMemo(() => sync.session.get(props.sessionID))
@@ -204,61 +207,88 @@ function SessionStatsBar(props: { sessionID: string }) {
 
   const modelName = createMemo(() => {
     const m = local.model.current()
-    if (!m) return "No model"
+    if (!m) return "AI Model"
     return m.modelID.split("/").pop() ?? m.modelID
   })
 
-  const tokens = createMemo(() => {
-    const msgs = sync.data.message[props.sessionID] ?? []
-    const last = msgs.findLast((x: any) => x.role === "assistant" && x.tokens?.output > 0) as any
-    if (!last) return null
-    return last.tokens
+  // Recent models actually used in this workspace — real usage history, not a hardcoded catalog.
+  const recentModels = createMemo(() => {
+    const current = local.model.current()
+    const recent = local.model.recent()
+    const list = current ? [current, ...recent.filter((m) => m.providerID !== current.providerID || m.modelID !== current.modelID)] : recent
+    return list.slice(0, 4)
+  })
+
+  const assistantMessages = createMemo(
+    () => (sync.data.message[props.sessionID] ?? []).filter((x: any) => x.role === "assistant") as any[],
+  )
+
+  // Cumulative session totals, not just the last turn — matches what a "session" stat should mean.
+  const sessionTotals = createMemo(() => {
+    return assistantMessages().reduce(
+      (acc, msg) => {
+        acc.input += msg.tokens?.input ?? 0
+        acc.output += msg.tokens?.output ?? 0
+        acc.cost += msg.cost ?? 0
+        return acc
+      },
+      { input: 0, output: 0, cost: 0 },
+    )
   })
 
   const msgCount = createMemo(() => (sync.data.message[props.sessionID] ?? []).length)
-  const state = createMemo(() => {
-    if (!sync.ready) return { label: "SYNCING", tone: "warning" as const }
-    const status = sync.data.session_status?.[props.sessionID]
-    if (status && status.type !== "idle")
-      return { label: "WORKING", tone: "active" as const }
-    return { label: "READY", tone: "success" as const }
-  })
+  const gitBranch = createMemo(() => getGitBranch())
+  const gitStatus = createMemo(() => getGitStatus())
+  const xpPct = createMemo(() => gami.xpIntoLevel() / gami.xpNeeded())
 
   return (
     <box
-      flexDirection="row"
+      flexDirection="column"
       flexShrink={0}
       paddingLeft={1}
       paddingRight={1}
       paddingTop={0}
       paddingBottom={0}
-      gap={2}
       backgroundColor={theme.backgroundPanel}
-      alignItems="center"
-      border={["bottom"]}
-      borderColor={theme.borderSubtle}
     >
-      <Show when={dimensions().width >= 110} fallback={<OliCodeWordmark variant="micro" />}>
-        <OliCodeWordmark variant="header" />
-      </Show>
-      <text fg={theme.border}>│</text>
-      <box flexDirection="row" gap={1} alignItems="center">
-        <text fg={theme.textMuted}>MODEL</text>
-        <text fg={theme.primary}>{modelName()}</text>
-      </box>
-      <Show when={dimensions().width >= 92}>
-        <text fg={theme.border}>│</text>
-      </Show>
-      <Show when={tokens() && dimensions().width >= 92}>
+      <box flexDirection="row" gap={2} alignItems="center">
         <box flexDirection="row" gap={1} alignItems="center">
-          <text fg={theme.textMuted}>IN</text>
-          <text fg={theme.info}>{(tokens()!.input / 1000).toFixed(1)}k</text>
-          <text fg={theme.textMuted}>OUT</text>
-          <text fg={theme.warning}>{(tokens()!.output / 1000).toFixed(1)}k</text>
+          <text fg={theme.success}>◆</text>
+          <text fg={theme.textMuted}>OLI</text>
         </box>
         <text fg={theme.border}>│</text>
-      </Show>
-      <Show when={dimensions().width >= 116}>
+        <box flexDirection="row" gap={1} alignItems="center">
+          <text fg={theme.textMuted}>MODELS</text>
+          {recentModels().map((m, i) => (
+            <text fg={m.providerID === local.model.current()?.providerID && m.modelID === local.model.current()?.modelID ? theme.primary : theme.textMuted}>
+              {i + 1}:{Model.name(sync.data.provider, m.providerID, m.modelID)}
+            </text>
+          ))}
+          <Show when={recentModels().length === 0}>
+            <text fg={theme.primary}>{modelName()}</text>
+          </Show>
+        </box>
+        <text fg={theme.border}>│</text>
+        <box flexDirection="row" gap={1} alignItems="center">
+          <text fg={theme.textMuted}>TOKENS</text>
+          <text fg={theme.info}>{((sessionTotals().input + sessionTotals().output) / 1000).toFixed(1)}k</text>
+        </box>
+        <Show when={sessionTotals().cost > 0}>
+          <text fg={theme.border}>│</text>
+          <box flexDirection="row" gap={1} alignItems="center">
+            <text fg={theme.textMuted}>COST</text>
+            <text fg={theme.warning}>${sessionTotals().cost.toFixed(4)}</text>
+          </box>
+        </Show>
+        <box flexGrow={1} />
+        <box flexDirection="row" gap={1} alignItems="center">
+          <text fg={theme.success}>◆</text>
+          <text fg={theme.primary}>
+            <b>OLICODE IS READY</b>
+          </text>
+        </box>
+      </box>
+      <box flexDirection="row" gap={2} alignItems="center">
         <box flexDirection="row" gap={1} alignItems="center">
           <text fg={theme.textMuted}>SESSION</text>
           <text fg={theme.text}>{elapsed()}</text>
@@ -266,9 +296,26 @@ function SessionStatsBar(props: { sessionID: string }) {
           <text fg={theme.text}>{msgCount()}</text>
           <text fg={theme.textMuted}>msgs</text>
         </box>
-      </Show>
-      <box flexGrow={1} />
-      <OliCodeStatus label={state().label} tone={state().tone} />
+        <text fg={theme.border}>│</text>
+        <box flexDirection="row" gap={1} alignItems="center">
+          <text fg={theme.textMuted}>GIT</text>
+          <text fg={theme.success}>⎇ {gitBranch()}</text>
+          <Show when={gitStatus()}>
+            <text fg={gitStatus() === "clean" ? theme.success : theme.warning}>{gitStatus()}</text>
+          </Show>
+        </box>
+        <text fg={theme.border}>│</text>
+        <box flexDirection="row" gap={1} alignItems="center">
+          <text fg={theme.textMuted}>LVL</text>
+          <text fg={theme.primary}>
+            <b>{gami.level()}</b>
+          </text>
+          <text fg={theme.primary}>{bar(xpPct(), 10)}</text>
+          <text fg={theme.textMuted}>
+            {gami.xpIntoLevel()}/{gami.xpNeeded()} XP
+          </text>
+        </box>
+      </box>
     </box>
   )
 }
@@ -278,6 +325,7 @@ export function Session() {
   const { navigate } = useRoute()
   const sync = useSync()
   const event = useEvent()
+  const gami = useGamification()
   const project = useProject()
   const tuiConfig = useTuiConfig()
   const kv = useKV()
@@ -324,9 +372,10 @@ export function Session() {
   const [diffWrapMode] = kv.signal<"word" | "none">("diff_wrap_mode", "word")
   const [_animationsEnabled, _setAnimationsEnabled] = kv.signal("animations_enabled", true)
   const [showGenericToolOutput, setShowGenericToolOutput] = kv.signal("generic_tool_output_visibility", false)
+  const [tab, setTab] = createSignal<WorkspaceTab>("chat")
 
   const wide = createMemo(() => dimensions().width > 130)
-  const leftSidebarVisible = createMemo(() => dimensions().width > 138)
+  const leftSidebarVisible = createMemo(() => dimensions().width > 110)
   const sidebarVisible = createMemo(() => {
     if (session()?.parentID) return false
     if (sidebarOpen()) return true
@@ -385,11 +434,19 @@ export function Session() {
   })
 
   let lastSwitch: string | undefined = undefined
+  const countedFileEdits = new Set<string>()
   event.on("message.part.updated", (evt) => {
     const part = evt.properties.part
     if (part.type !== "tool") return
     if (part.sessionID !== route.sessionID) return
     if (part.state.status !== "completed") return
+    // Gamification: reward real completed file edits, once per tool call.
+    if (part.tool === "write" || part.tool === "edit" || part.tool === "apply_patch") {
+      if (countedFileEdits.has(part.id)) return
+      countedFileEdits.add(part.id)
+      gami.trackFileEdit()
+      return
+    }
     if (part.id === lastSwitch) return
 
     if (part.tool === "plan_exit") {
@@ -450,7 +507,7 @@ export function Session() {
         `${logo[3] ?? ""}`,
         ``,
         `  ${weak("Session")}${UI.Style.TEXT_NORMAL_BOLD}${title}${UI.Style.TEXT_NORMAL}`,
-        `  ${weak("Continue")}${UI.Style.TEXT_NORMAL_BOLD}olicode -s ${session()?.id}${UI.Style.TEXT_NORMAL}`,
+        `  ${weak("Continue")}${UI.Style.TEXT_NORMAL_BOLD}opencode -s ${session()?.id}${UI.Style.TEXT_NORMAL}`,
         ``,
       ].join("\n"),
     )
@@ -458,6 +515,7 @@ export function Session() {
 
   // Helper: Find next visible message boundary in direction
   const findNextVisibleMessage = (direction: "next" | "prev"): string | null => {
+    if (scroll?.isDestroyed || tab() !== "chat") return null
     const children = scroll.getChildren()
     const messagesList = messages()
     const scrollTop = scroll.y
@@ -489,6 +547,10 @@ export function Session() {
 
   // Helper: Scroll to message in direction or fallback to page scroll
   const scrollToMessage = (direction: "next" | "prev", dialog: ReturnType<typeof useDialog>) => {
+    if (scroll?.isDestroyed || tab() !== "chat") {
+      dialog.clear()
+      return
+    }
     const targetID = findNextVisibleMessage(direction)
 
     if (!targetID) {
@@ -507,6 +569,13 @@ export function Session() {
       if (!scroll || scroll.isDestroyed) return
       scroll.scrollTo(scroll.scrollHeight)
     }, 50)
+  }
+
+  // Guard scroll commands so they no-op when the chat scrollbox is not mounted
+  // (e.g. while on the EXECUTION PLAN / EXECUTION CONTRACT workspace tabs).
+  function scrollChat(run: (s: ScrollBoxRenderable) => void) {
+    if (!scroll || scroll.isDestroyed || tab() !== "chat") return
+    run(scroll)
   }
 
   const local = useLocal()
@@ -837,7 +906,7 @@ export function Session() {
       category: "Session",
       hidden: true,
       run: () => {
-        scroll.scrollBy(-scroll.height / 2)
+        scrollChat((s) => s.scrollBy(-s.height / 2))
         dialog.clear()
       },
     },
@@ -847,7 +916,7 @@ export function Session() {
       category: "Session",
       hidden: true,
       run: () => {
-        scroll.scrollBy(scroll.height / 2)
+        scrollChat((s) => s.scrollBy(s.height / 2))
         dialog.clear()
       },
     },
@@ -857,7 +926,7 @@ export function Session() {
       category: "Session",
       hidden: true,
       run: () => {
-        scroll.scrollBy(-1)
+        scrollChat((s) => s.scrollBy(-1))
         dialog.clear()
       },
     },
@@ -867,7 +936,7 @@ export function Session() {
       category: "Session",
       hidden: true,
       run: () => {
-        scroll.scrollBy(1)
+        scrollChat((s) => s.scrollBy(1))
         dialog.clear()
       },
     },
@@ -877,7 +946,7 @@ export function Session() {
       category: "Session",
       hidden: true,
       run: () => {
-        scroll.scrollBy(-scroll.height / 4)
+        scrollChat((s) => s.scrollBy(-s.height / 4))
         dialog.clear()
       },
     },
@@ -887,7 +956,7 @@ export function Session() {
       category: "Session",
       hidden: true,
       run: () => {
-        scroll.scrollBy(scroll.height / 4)
+        scrollChat((s) => s.scrollBy(s.height / 4))
         dialog.clear()
       },
     },
@@ -897,7 +966,7 @@ export function Session() {
       category: "Session",
       hidden: true,
       run: () => {
-        scroll.scrollTo(0)
+        scrollChat((s) => s.scrollTo(0))
         dialog.clear()
       },
     },
@@ -907,7 +976,7 @@ export function Session() {
       category: "Session",
       hidden: true,
       run: () => {
-        scroll.scrollTo(scroll.scrollHeight)
+        scrollChat((s) => s.scrollTo(s.scrollHeight))
         dialog.clear()
       },
     },
@@ -917,6 +986,10 @@ export function Session() {
       category: "Session",
       hidden: true,
       run: () => {
+        if (scroll?.isDestroyed || tab() !== "chat") {
+          dialog.clear()
+          return
+        }
         const messages = sync.data.message[route.sessionID]
         if (!messages || !messages.length) return
 
@@ -1200,6 +1273,14 @@ export function Session() {
   // snap to bottom when session changes
   createEffect(on(() => route.sessionID, toBottom))
 
+  // reset workspace tab when switching sessions
+  createEffect(
+    on(() => route.sessionID, () => {
+      setTab("chat")
+      countedFileEdits.clear()
+    }),
+  )
+
   return (
     <PathFormatterProvider path={session()?.directory}>
       <context.Provider
@@ -1222,14 +1303,17 @@ export function Session() {
       >
         <box flexDirection="column" flexGrow={1} minHeight={0}>
         <SessionStatsBar sessionID={route.sessionID} />
+        <SessionTabs tab={tab} setTab={setTab} />
         <box flexDirection="row" flexGrow={1} minHeight={0}>
           <Show when={leftSidebarVisible()}>
             <LeftSidebar sessionID={route.sessionID} />
           </Show>
           <box flexGrow={1} minHeight={0} paddingBottom={1} paddingLeft={2} paddingRight={2} gap={1}>
             <Show when={session()}>
-              <scrollbox
-                ref={(r) => (scroll = r)}
+            <Switch>
+              <Match when={tab() === "chat"}>
+                <scrollbox
+                  ref={(r) => (scroll = r)}
                 viewportOptions={{
                   paddingRight: showScrollbar() ? 1 : 0,
                 }}
@@ -1341,7 +1425,15 @@ export function Session() {
                     </Switch>
                   )}
                 </For>
-              </scrollbox>
+                </scrollbox>
+              </Match>
+              <Match when={tab() === "plan"}>
+                <ExecutionPlanView sessionID={route.sessionID} />
+              </Match>
+              <Match when={tab() === "contract"}>
+                <ExecutionContractView sessionID={route.sessionID} />
+              </Match>
+            </Switch>
               <box flexShrink={0}>
                 <Show when={permissions().length > 0}>
                   <PermissionPrompt request={permissions()[0]} />
@@ -1367,6 +1459,7 @@ export function Session() {
                       ref={bind}
                       disabled={disabled()}
                       onSubmit={() => {
+                        gami.trackMessage()
                         toBottom()
                       }}
                       sessionID={route.sessionID}
@@ -2206,7 +2299,7 @@ function Task(props: ToolProps<typeof TaskTool>) {
     if (!props.input.description) return ""
     const description =
       props.metadata.background === true ? `${props.input.description} (background)` : props.input.description
-    let content = [`${Locale.titlecase(props.input.subagent_type ?? "General")} Task - ${description}`]
+    let content = [`${Locale.titlecase(props.input.subagent_type ?? "General")} Task — ${description}`]
 
     if (isRunning() && tools().length > 0) {
       // content[0] += ` · ${tools().length} toolcalls`

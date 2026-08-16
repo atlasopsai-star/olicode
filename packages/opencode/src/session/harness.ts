@@ -120,7 +120,9 @@ export function action(query: string): Action {
   return "answer"
 }
 
-export function routeMode(query: string): "build" | "debug" | "design" | "research" | "browser" | "ship" {
+export type Mode = "build" | "debug" | "design" | "research" | "browser" | "ship"
+
+export function routeMode(query: string): Mode {
   const selected = action(query)
   if (selected === "answer" || selected === "change") return "build"
   if (selected === "inspect") return "research"

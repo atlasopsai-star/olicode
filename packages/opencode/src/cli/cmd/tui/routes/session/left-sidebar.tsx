@@ -1,38 +1,32 @@
 import { createMemo, createSignal, onCleanup, onMount, Show } from "solid-js"
-import { execSync } from "child_process"
 import { useTheme } from "../../context/theme"
 import { useProject } from "@tui/context/project"
 import { useSync } from "@tui/context/sync"
+import { useLocal } from "@tui/context/local"
 import { useGamification } from "../../context/gamification"
-import { OliCodeSectionTitle } from "../../component/olicode-brand"
-import { useCommandShortcut } from "../../keymap"
-
-function getGitBranch(): string {
-  try {
-    return execSync("git branch --show-current 2>/dev/null", { encoding: "utf8", timeout: 2000 }).trim()
-  } catch {
-    return ""
-  }
-}
-
-function getGitStatus(): string {
-  try {
-    const out = execSync("git status --porcelain 2>/dev/null", { encoding: "utf8", timeout: 2000 })
-    const lines = out.trim().split("\n").filter(Boolean)
-    if (!lines.length) return "clean"
-    return `${lines.length} changed`
-  } catch {
-    return ""
-  }
-}
+import { getGitBranch, getGitStatus } from "../../util/git"
+import { bar } from "../../util/format"
+import type { Mode as HarnessMode } from "@/session/harness"
 
 const WIDTH = 26
 
-function bar(pct: number, width: number): string {
-  const filled = Math.round(Math.min(1, Math.max(0, pct)) * width)
-  const empty = width - filled
-  return "█".repeat(filled) + "░".repeat(empty)
+const HARNESS_MODES: HarnessMode[] = ["build", "debug", "design", "research", "browser", "ship"]
+const HARNESS_MODE_LABEL: Record<HarnessMode, string> = {
+  build: "Code",
+  debug: "Debug",
+  design: "Design",
+  research: "Research",
+  browser: "Browser",
+  ship: "Delivery",
 }
+
+const MODE_NAV: { key: string; label: string; agent: string; hint: string }[] = [
+  { key: "1", label: "Plan", agent: "planner", hint: "Strategy & roadmap" },
+  { key: "2", label: "Build", agent: "builder", hint: "Code & implement" },
+  { key: "3", label: "Design", agent: "ux", hint: "UI/UX & visuals" },
+  { key: "4", label: "Review", agent: "qa", hint: "Quality & security" },
+  { key: "5", label: "Ship", agent: "deploy", hint: "Deploy & monitor" },
+]
 
 function Clock() {
   const { theme } = useTheme()
@@ -65,26 +59,75 @@ function Divider(props: { label?: string }) {
   )
 }
 
-function CommandCenter() {
+function ModeNav() {
   const { theme } = useTheme()
-  const commands = [
-    { key: useCommandShortcut("session.new"), label: "New session" },
-    { key: useCommandShortcut("command.palette.show"), label: "Commands" },
-    { key: useCommandShortcut("model.list"), label: "Models" },
-    { key: useCommandShortcut("session.list"), label: "Sessions" },
-    { key: useCommandShortcut("help.show"), label: "Help" },
-  ]
+  const local = useLocal()
+  const current = createMemo(() => local.agent.current()?.name)
+
   return (
     <box gap={0}>
-      <box marginBottom={1}>
-        <OliCodeSectionTitle>COMMANDS</OliCodeSectionTitle>
+      <box flexDirection="row" gap={1} alignItems="center" marginBottom={1}>
+        <text fg={theme.primary}>◈</text>
+        <text fg={theme.text}>
+          <b>COMMAND CENTER</b>
+        </text>
       </box>
-      {commands.map((cmd) => (
-        <box flexDirection="row" justifyContent="space-between" paddingLeft={1}>
-          <text fg={theme.textMuted}>{cmd.label}</text>
-          <text fg={theme.primary}>{cmd.key()}</text>
-        </box>
-      ))}
+      {MODE_NAV.map((item) => {
+        const active = () => current() === item.agent
+        const color = () => local.agent.color(item.agent)
+        return (
+          <box
+            flexDirection="row"
+            gap={1}
+            paddingLeft={1}
+            backgroundColor={active() ? theme.backgroundElement : undefined}
+            onMouseUp={() => local.agent.set(item.agent)}
+          >
+            <text fg={active() ? color() : theme.textMuted}>[{item.key}]</text>
+            <box gap={0}>
+              <text fg={active() ? theme.text : theme.textMuted}>
+                {active() ? <b>{item.label}</b> : item.label}
+              </text>
+              <text fg={theme.textMuted}>{item.hint}</text>
+            </box>
+          </box>
+        )
+      })}
+    </box>
+  )
+}
+
+function HarnessStatus(props: { sessionID: string }) {
+  const { theme } = useTheme()
+  const sync = useSync()
+
+  const activeMode = createMemo(() => {
+    const status = sync.data.session_status?.[props.sessionID] as
+      | { metadata?: Record<string, unknown> }
+      | undefined
+    const mode = status?.metadata?.mode
+    return typeof mode === "string" && HARNESS_MODES.includes(mode as HarnessMode) ? (mode as HarnessMode) : undefined
+  })
+
+  return (
+    <box gap={0}>
+      <box flexDirection="row" gap={1} alignItems="center" marginBottom={1}>
+        <text fg={theme.accent}>▣</text>
+        <text fg={theme.text}>
+          <b>HARNESS STATUS</b>
+        </text>
+      </box>
+      <box paddingLeft={1} gap={0}>
+        {HARNESS_MODES.map((mode) => {
+          const isActive = () => activeMode() === mode
+          return (
+            <box flexDirection="row" justifyContent="space-between">
+              <text fg={isActive() ? theme.success : theme.textMuted}>{HARNESS_MODE_LABEL[mode]}</text>
+              <text fg={isActive() ? theme.success : theme.textMuted}>{isActive() ? "ACTIVE" : "idle"}</text>
+            </box>
+          )
+        })}
+      </box>
     </box>
   )
 }
@@ -117,34 +160,33 @@ function ProjectOverview(props: { sessionID: string }) {
       if (pkg.dependencies?.vue || pkg.devDependencies?.vue) return "Vue"
       if (pkg.dependencies?.svelte || pkg.devDependencies?.svelte) return "Svelte"
       if (pkg.dependencies?.express || pkg.devDependencies?.express) return "Express"
-      return pkg.name ? "Node.js" : ""
+      return "Node.js"
     } catch {
-      return ""
+      return "TypeScript"
     }
   })
 
   return (
     <box gap={0}>
-      <box marginBottom={1}>
-        <OliCodeSectionTitle tone="secondary">PROJECT</OliCodeSectionTitle>
+      <box flexDirection="row" gap={1} alignItems="center" marginBottom={1}>
+        <text fg={theme.secondary}>⬡</text>
+        <text fg={theme.text}>
+          <b>PROJECT OVERVIEW</b>
+        </text>
       </box>
       <box paddingLeft={1} gap={0}>
         <box flexDirection="row" justifyContent="space-between">
           <text fg={theme.textMuted}>Project:</text>
           <text fg={theme.text}>{cwd()}</text>
         </box>
-        <Show when={framework()}>
-          <box flexDirection="row" justifyContent="space-between">
-            <text fg={theme.textMuted}>Stack:</text>
-            <text fg={theme.info}>{framework()}</text>
-          </box>
-        </Show>
-        <Show when={branch()}>
-          <box flexDirection="row" justifyContent="space-between">
-            <text fg={theme.textMuted}>Branch:</text>
-            <text fg={theme.success}>⎇ {branch()}</text>
-          </box>
-        </Show>
+        <box flexDirection="row" justifyContent="space-between">
+          <text fg={theme.textMuted}>Framework:</text>
+          <text fg={theme.info}>{framework()}</text>
+        </box>
+        <box flexDirection="row" justifyContent="space-between">
+          <text fg={theme.textMuted}>Branch:</text>
+          <text fg={theme.success}>⎇ {branch()}</text>
+        </box>
         <Show when={gitStatus()}>
           <box flexDirection="row" justifyContent="space-between">
             <text fg={theme.textMuted}>Git:</text>
@@ -168,10 +210,22 @@ function GamificationPanel() {
   const barWidth = WIDTH - 8
   const xpBar = createMemo(() => bar(pct(), barWidth))
 
+  const motivational = createMemo(() => {
+    const lvl = gami.level()
+    if (lvl >= 20) return "You're legendary! 🔥"
+    if (lvl >= 15) return "Elite coder status!"
+    if (lvl >= 10) return "Keep coding, legend!"
+    if (lvl >= 5) return "On a roll!"
+    return "Keep it up! 💪"
+  })
+
   return (
     <box gap={0}>
-      <box marginBottom={1}>
-        <OliCodeSectionTitle>PROGRESS</OliCodeSectionTitle>
+      <box flexDirection="row" gap={1} alignItems="center" marginBottom={1}>
+        <text fg={theme.warning}>★</text>
+        <text fg={theme.text}>
+          <b>GAMIFICATION</b>
+        </text>
       </box>
       <box paddingLeft={1} gap={0}>
         <box flexDirection="row" justifyContent="space-between">
@@ -210,6 +264,8 @@ function GamificationPanel() {
             <b>{gami.data().xp.toLocaleString()}</b>
           </text>
         </box>
+        <box height={1} />
+        <text fg={theme.primary}>{motivational()}</text>
       </box>
     </box>
   )
@@ -228,14 +284,14 @@ export function LeftSidebar(props: { sessionID: string }) {
       paddingLeft={1}
       paddingRight={1}
       flexShrink={0}
-      border={["right"]}
-      borderColor={theme.borderSubtle}
     >
       <scrollbox flexGrow={1}>
         <box flexShrink={0} gap={1} paddingRight={1}>
-          <CommandCenter />
+          <ModeNav />
           <Divider />
           <ProjectOverview sessionID={props.sessionID} />
+          <Divider />
+          <HarnessStatus sessionID={props.sessionID} />
           <Divider />
           <GamificationPanel />
         </box>
