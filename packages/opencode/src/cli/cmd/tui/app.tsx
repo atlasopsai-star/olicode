@@ -29,7 +29,7 @@ import { ProjectProvider, useProject } from "@tui/context/project"
 import { EditorContextProvider } from "@tui/context/editor"
 import { useEvent } from "@tui/context/event"
 import { SDKProvider, useSDK } from "@tui/context/sdk"
-import { StartupLoading } from "@tui/component/startup-loading"
+import { StartupSplash } from "@tui/component/startup-splash"
 import { SyncProvider, useSync } from "@tui/context/sync"
 import { SyncProviderV2 } from "@tui/context/sync-v2"
 import { LocalProvider, useLocal } from "@tui/context/local"
@@ -1076,7 +1076,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         </box>
         <TuiPluginRuntime.Slot name="app" />
       </Show>
-      <StartupLoading ready={ready} />
+      <StartupSplash ready={ready} />
     </box>
   )
 }
