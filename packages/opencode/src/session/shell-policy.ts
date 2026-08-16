@@ -90,6 +90,12 @@ export function paths(command: string) {
       (item) =>
         !item.startsWith("-") &&
         !/^[A-Z_][A-Z0-9_]*=/i.test(item) &&
+        // A URL argument (curl/wget health checks, fetch calls) contains "/"
+        // the same as a file path does, but isn't one. Live-caught:
+        // `curl -fsS http://127.0.0.1:3001` had the URL misread as a new
+        // file needing scope justification, blocking a routine server
+        // health check with the exact same false-block as a real mutation.
+        !/^[a-z][a-z0-9+.-]*:\/\//i.test(item) &&
         (item.includes("/") || item.startsWith(".") || /\.[a-z0-9]{1,8}$/i.test(item)),
     )
 }

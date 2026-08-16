@@ -67,4 +67,14 @@ describe("shell policy", () => {
   test("extracts file-like mutation targets", () => {
     expect(ShellPolicy.paths("cp src/a.ts src/b.ts")).toEqual(["src/a.ts", "src/b.ts"])
   })
+
+  // Live-caught: a URL argument contains "/" the same as a file path does,
+  // so `curl -fsS http://127.0.0.1:3001` (a routine server health check
+  // right after starting a dev server) had the URL misread as a new file
+  // needing scope justification, blocking it the same as a real mutation.
+  test("does not mistake a URL argument for a file path", () => {
+    expect(ShellPolicy.paths("curl -fsS http://127.0.0.1:3001")).toEqual([])
+    expect(ShellPolicy.paths("curl -fsS https://example.com/health")).toEqual([])
+    expect(ShellPolicy.paths("curl -o out.json http://127.0.0.1:3001/api")).toEqual(["out.json"])
+  })
 })
