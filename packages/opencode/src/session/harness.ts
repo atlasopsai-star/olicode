@@ -106,13 +106,22 @@ export function objective(query: string) {
 }
 
 const SHIP_PHRASES = /\bpull request\b/i
+// Live-caught regression (OliBench BROWSER lane, 2026-08-16): the single-word
+// BROWSER list only matched literal technical vocabulary ("browser", "click",
+// "navigate"...), so natural outcome-language requests -- the exact phrasing
+// the product is supposed to support ("go through the site and make sure
+// checkout works", not "call navigate, click element 12") -- fell through to
+// "change"/STANDARD instead, which pulled in irrelevant change/tests evidence
+// requirements for a task the prompt explicitly said not to edit anything for.
+const BROWSER_PHRASES =
+  /\bgo through (?:the|this) (?:site|app|page|website)\b|\b(?:checkout )?flow works\b|\bend to end\b|\b(?:breaks?|overlaps?) (?:on|at) (?:mobile|desktop)\b|\bmobile (?:width|viewport)\b/i
 
 export function action(query: string): Action {
   const tokens = tokenize(query)
   // Match the phrase because either word alone occurs in unrelated coding tasks.
   if (contains(tokens, SHIP) || SHIP_PHRASES.test(query)) return "ship"
   if (contains(tokens, DESIGN)) return "design"
-  if (contains(tokens, BROWSER)) return "browser"
+  if (contains(tokens, BROWSER) || BROWSER_PHRASES.test(query)) return "browser"
   if (contains(tokens, DEBUG)) return "debug"
   if (contains(tokens, MUTATION)) return "change"
   if (contains(tokens, RESEARCH))

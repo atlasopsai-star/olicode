@@ -193,6 +193,27 @@ describe("session.harness", () => {
       expect(SessionHarness.action(query)).toBe("ship")
   })
 
+  // Live-caught regression (OliBench BROWSER lane, 2026-08-16): the BROWSER
+  // word list only matched literal technical vocabulary, so natural
+  // outcome-language browser-verification requests -- the exact phrasing the
+  // product is supposed to support -- fell through to "change"/STANDARD,
+  // pulling in change/tests evidence a "do not edit anything" verification
+  // task could never satisfy.
+  test("routes natural outcome-language browser verification requests to the browser action", () => {
+    for (const query of [
+      "Go through this site and make sure the checkout flow works end to end.",
+      "Check this storefront at both a desktop width and a narrow mobile width and tell me what breaks or overlaps on mobile.",
+      "Make sure the login flow works before we call this done.",
+    ])
+      expect(SessionHarness.action(query)).toBe("browser")
+  })
+
+  test("does not misfire browser on build/debug requests that merely mention similar words", () => {
+    expect(SessionHarness.action("Add a checkout flow to this app")).not.toBe("browser")
+    expect(SessionHarness.action("Build a checkout flow for this store")).not.toBe("browser")
+    expect(SessionHarness.action("Fix the login bug on mobile")).not.toBe("browser")
+  })
+
   test("does not misfire ship on unrelated prose that merely contains shipping-like substrings", () => {
     expect(SessionHarness.action("I'm fully committed to fixing this bug properly")).not.toBe("ship")
     expect(SessionHarness.action("Update the shipping address validation in checkout")).not.toBe("ship")
