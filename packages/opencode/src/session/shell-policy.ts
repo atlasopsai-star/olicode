@@ -41,6 +41,12 @@ const READ_ONLY = new Set([
   // safe to auto-run). Live-caught: "node --version" and "bun --version"
   // were denied in a non-interactive run alongside the same "open" bug.
   "node",
+  // Passive process/socket inspection, no mutating form exists for either --
+  // same tier as `whoami`/`which`. Live-caught: verifying a just-started dev
+  // server ("lsof -iTCP:3000 -sTCP:LISTEN") required a permission click for
+  // what is, functionally, a read-only status check.
+  "lsof",
+  "ps",
 ])
 
 const MUTATION =

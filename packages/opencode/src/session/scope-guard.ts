@@ -1,9 +1,11 @@
 import path from "path"
+import { Global } from "@opencode-ai/core/global"
 import type { MessageV2 } from "./message-v2"
 import type { OliTaskContract } from "./harness"
 
 const INPUT_FILEPATH_TOOLS: Record<string, "seen" | "edited"> = { read: "seen", edit: "edited", write: "edited" }
 const GENERATED = ["dist/", "build/", "coverage/", ".next/", "node_modules/"]
+const NORMALIZED_TMP = Global.Path.tmp.replaceAll("\\", "/").replace(/\/$/, "")
 
 function filesFromApplyPatchMetadata(metadata: unknown) {
   if (!metadata || typeof metadata !== "object") return []
@@ -32,6 +34,15 @@ function matches(filePath: string, scope: string) {
 
 export function classifyFile(filePath: string, contract: OliTaskContract): MutationDecision {
   const file = normalized(filePath)
+  // The shell tool's own prompt tells the model this directory "has already
+  // been created, already exists, and is pre-approved for external
+  // directory access" -- unconditionally, not scoped to any action type.
+  // Live-caught: a "start the dev server" task couldn't write its own
+  // startup log there because this check never actually honored that
+  // promise, so every nohup/background-with-logging pattern the model
+  // tried got blocked before ever reaching a real permission decision.
+  if (file === NORMALIZED_TMP || file.startsWith(`${NORMALIZED_TMP}/`))
+    return { classification: "NECESSARY", reason: "The path is inside the harness-managed scratch directory, which the shell tool documents as pre-approved." }
   if (contract.action === "answer" || contract.action === "inspect" || contract.action === "research")
     return { classification: "UNRELATED", reason: `The ${contract.action} contract does not authorize workspace mutation.` }
   if (contract.protectedScope.some((item) => matches(file, item))) {

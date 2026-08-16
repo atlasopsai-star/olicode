@@ -115,6 +115,17 @@ const SHIP_PHRASES = /\bpull request\b/i
 // requirements for a task the prompt explicitly said not to edit anything for.
 const BROWSER_PHRASES =
   /\bgo through (?:the|this) (?:site|app|page|website)\b|\b(?:checkout )?flow works\b|\bend to end\b|\b(?:breaks?|overlaps?) (?:on|at) (?:mobile|desktop)\b|\bmobile (?:width|viewport)\b/i
+// Live-caught regression (2026-08-16): "start"/"run" (as in launching a
+// process) aren't in MUTATION, so "start the dev server" fell through to
+// "answer" -- and classifyFile() hard-blocks ANY workspace mutation for
+// "answer" contracts, including a redirect to /dev/null or a log file in
+// the OS temp dir. Reproduced live: the model tried three different safe
+// ways to background the server and every one was blocked by the scope
+// guard before it ever reached a real permission decision. Phrase-scoped
+// (not bare "start"/"run") to avoid misfiring on questions like "how does
+// the server run" or "why did it crash on start".
+const RUN_PHRASES =
+  /\b(?:start|run)\b[^.!?]{0,30}\b(?:dev\s*server|the\s+server|the\s+app\b|the\s+application|it\s+up)\b|\b(?:npm|yarn|pnpm|bun)\s+run\s+dev\b/i
 
 export function action(query: string): Action {
   const tokens = tokenize(query)
@@ -123,7 +134,7 @@ export function action(query: string): Action {
   if (contains(tokens, DESIGN)) return "design"
   if (contains(tokens, BROWSER) || BROWSER_PHRASES.test(query)) return "browser"
   if (contains(tokens, DEBUG)) return "debug"
-  if (contains(tokens, MUTATION)) return "change"
+  if (contains(tokens, MUTATION) || RUN_PHRASES.test(query)) return "change"
   if (contains(tokens, RESEARCH))
     return tokens.includes("inspect") || tokens.includes("review") || tokens.includes("audit") ? "inspect" : "research"
   return "answer"

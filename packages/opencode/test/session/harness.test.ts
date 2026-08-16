@@ -214,6 +214,23 @@ describe("session.harness", () => {
     expect(SessionHarness.action("Fix the login bug on mobile")).not.toBe("browser")
   })
 
+  // Live-caught regression (2026-08-16): "start"/"run" (as in launching a
+  // process) weren't in MUTATION, so "start the dev server" fell through to
+  // "answer" -- and classifyFile() hard-blocks ANY workspace mutation for
+  // "answer" contracts, including writes that have nothing to do with
+  // source code (a redirected log file, /dev/null). Reproduced live: the
+  // model tried three different safe ways to background the server and
+  // every one was blocked before it ever reached a real permission choice.
+  test("routes start/run-a-process requests to the change action", () => {
+    for (const query of ["start the dev server", "run the dev server", "start the app", "run npm run dev", "start it up"])
+      expect(SessionHarness.action(query)).toBe("change")
+  })
+
+  test("does not misfire change on questions that merely mention start/run", () => {
+    expect(SessionHarness.action("how does the server run")).not.toBe("change")
+    expect(SessionHarness.action("why did it crash on start")).not.toBe("change")
+  })
+
   test("does not misfire ship on unrelated prose that merely contains shipping-like substrings", () => {
     expect(SessionHarness.action("I'm fully committed to fixing this bug properly")).not.toBe("ship")
     expect(SessionHarness.action("Update the shipping address validation in checkout")).not.toBe("ship")

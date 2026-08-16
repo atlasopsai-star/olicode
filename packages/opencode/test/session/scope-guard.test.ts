@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { Global } from "@opencode-ai/core/global"
 import { ScopeGuard } from "../../src/session/scope-guard"
 import type { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
@@ -109,6 +110,30 @@ describe("ScopeGuard.scan", () => {
       contract: SessionHarness.contract("Audit src/button.ts"),
     })
     expect(decision.classification).toBe("UNRELATED")
+  })
+
+  // Live-caught (2026-08-16): the shell tool's own prompt tells the model
+  // Global.Path.tmp "has already been created, already exists, and is
+  // pre-approved for external directory access" -- unconditionally. But
+  // classifyFile() never actually honored that promise, so "start the dev
+  // server" couldn't write its own startup log there: every nohup/
+  // background-with-logging pattern the model tried got blocked before
+  // ever reaching a real permission decision.
+  test("allows writes inside the harness-managed scratch directory for any action", () => {
+    const inChange = ScopeGuard.classifyFile(
+      path.join(Global.Path.tmp, "dev-server.log"),
+      SessionHarness.contract("start the dev server"),
+    )
+    expect(inChange.classification).toBe("NECESSARY")
+
+    const inAnswer = ScopeGuard.classifyFile(
+      path.join(Global.Path.tmp, "scratch.log"),
+      SessionHarness.contract("what does this function do"),
+    )
+    expect(inAnswer.classification).toBe("NECESSARY")
+
+    const outsideTmp = ScopeGuard.classifyFile("/some/unrelated/path.txt", SessionHarness.contract("what does this function do"))
+    expect(outsideTmp.classification).toBe("UNRELATED")
   })
 
   test("worktree snapshots isolate task changes from pre-existing user work", async () => {
