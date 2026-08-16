@@ -29,6 +29,13 @@ const READ_ONLY = new Set([
   "python3",
   "tsc",
   "tsgo",
+  // Launches a URL/file in its default OS handler (browser, Preview, etc.) --
+  // no filesystem or repo state changes, same safety tier as `git status` or
+  // `ls`. Live-caught: "open github" was classified UNKNOWN_MUTATION and
+  // silently blocked on a permission prompt easy to miss in the TUI, making
+  // a request that should be instant look like a hang.
+  "open",
+  "xdg-open",
 ])
 
 const MUTATION =

@@ -20,6 +20,13 @@ describe("shell policy", () => {
       "whoami",
       "wc -l src/ui.ts",
       "test -f index.html",
+      // Live-caught: "open github" silently blocked on a permission prompt
+      // easy to miss in the TUI, making an instant request look like a
+      // hang. Launching a URL/file in its default OS handler is the same
+      // safety tier as `git status` -- no filesystem or repo state change.
+      "open https://github.com",
+      "open .",
+      "xdg-open https://github.com",
     ])
       expect(ShellPolicy.classify(command)).toBe("READ_ONLY")
   })
